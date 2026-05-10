@@ -1,0 +1,84 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'teacher') == 'admin') ||
+        request.auth.token.email == 'adnanali03.ds@gmail.com'
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Collections ---
+
+    match /users/{userId} {
+      allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      allow create: if isSignedIn() && isValidId(userId) && isOwner(userId) && 
+                      (incoming().role == 'teacher' || (incoming().role == 'admin' && request.auth.token.email == 'adnanali03.ds@gmail.com')) &&
+                      incoming().keys().hasAll(['uid', 'email', 'role']) &&
+                      incoming().uid == request.auth.uid;
+      allow update: if isSignedIn() && (
+        (isOwner(userId) && incoming().role == existing().role && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'department'])) ||
+        (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'department']))
+      );
+    }
+
+    match /attendance/{attendanceId} {
+      function isValidAttendanceReceipt(data) {
+        return data.userId == request.auth.uid &&
+               data.date is string &&
+               data.timeIn is timestamp;
+      }
+
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidAttendanceReceipt(incoming()) && 
+                      incoming().keys().hasAll(['userId', 'userName', 'date', 'timeIn', 'status']) &&
+                      incoming().userId == request.auth.uid;
+      allow update: if isSignedIn() && (
+        (resource.data.userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['timeOut'])) ||
+        isAdmin()
+      );
+    }
+
+    match /leaves/{leaveId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid && 
+                      incoming().status == 'pending';
+      allow update: if isSignedIn() && (
+        (resource.data.userId == request.auth.uid && existing().status == 'pending' && incoming().diff(existing()).affectedKeys().hasOnly(['startDate', 'endDate', 'reason', 'type'])) ||
+        (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['status']))
+      );
+    }
+
+    match /announcements/{announcementId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+  }
+}

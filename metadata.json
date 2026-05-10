@@ -1,0 +1,8 @@
+{
+  "name": "THE GUIDE ACADEMY",
+  "description": "A comprehensive institutional attendance management system for THE GUIDE ACADEMY, featuring QR code scanning, Google authentication, and automated reporting.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": []
+}

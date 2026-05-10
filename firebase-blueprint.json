@@ -1,0 +1,78 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a teacher or admin in the system.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["teacher", "admin"] },
+        "department": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "AttendanceRecord": {
+      "title": "Attendance Record",
+      "description": "Daily attendance logs for teachers.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "timeIn": { "type": "string", "format": "date-time" },
+        "timeOut": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["present", "late"] }
+      },
+      "required": ["userId", "date", "timeIn"]
+    },
+    "LeaveApplication": {
+      "title": "Leave Application",
+      "description": "Request for leave by teachers.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "reason": { "type": "string" },
+        "type": { "type": "string", "enum": ["sick", "casual", "vacation"] },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "appliedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "startDate", "endDate", "type", "status"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Important updates broadcast by admins.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "authorId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "content", "authorId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Teacher and Admin profiles."
+    },
+    "/attendance/{attendanceId}": {
+      "schema": "AttendanceRecord",
+      "description": "Logs of daily attendance."
+    },
+    "/leaves/{leaveId}": {
+      "schema": "LeaveApplication",
+      "description": "Submitted leave requests."
+    },
+    "/announcements/{announcementId}": {
+      "schema": "Announcement",
+      "description": "System-wide notifications."
+    }
+  }
+}
