@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, FormEvent } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Camera, RefreshCcw } from 'lucide-react';
@@ -60,7 +60,7 @@ export default function QRScanner({ onClose, onScan }: { onClose: () => void, on
     };
   }, []);
 
-  const handleManualSubmit = (e: React.FormEvent) => {
+  const handleManualSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (manualCode.trim()) {
       onScan(manualCode.trim());
