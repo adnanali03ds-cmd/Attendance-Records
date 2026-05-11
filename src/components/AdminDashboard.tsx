@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { 
   collection, 
   query, 
@@ -13,11 +13,13 @@ import {
   doc, 
   addDoc, 
   serverTimestamp,
-  getDocs 
+  getDocs,
+  deleteDoc,
+  setDoc
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { UserProfile, AttendanceRecord, LeaveApplication, Announcement } from '../types';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   Users, 
   CheckCircle, 
@@ -30,7 +32,10 @@ import {
   Send,
   Download,
   Mail,
-  UserPlus
+  UserPlus,
+  Plus,
+  Trash2,
+  X
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { format } from 'date-fns';
@@ -42,6 +47,8 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
   const [pendingLeaves, setPendingLeaves] = useState<LeaveApplication[]>([]);
   const [announcement, setAnnouncement] = useState({ title: '', content: '' });
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'leaves' | 'announcements'>('overview');
+  const [isAddingTeacher, setIsAddingTeacher] = useState(false);
+  const [newTeacher, setNewTeacher] = useState({ name: '', email: '', department: '' });
 
   useEffect(() => {
     // Teachers
@@ -95,6 +102,36 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
       await updateDoc(doc(db, 'users', uid), { role: newRole });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'users');
+    }
+  };
+
+  const handleAddTeacher = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!newTeacher.name || !newTeacher.email) return;
+    
+    try {
+      // Use a manually generated ID or let Firestore generate one
+      await addDoc(collection(db, 'users'), {
+        ...newTeacher,
+        role: 'teacher',
+        createdAt: new Date().toISOString(),
+        isPreRegistered: true // Flag to indicate admin added this
+      });
+      setNewTeacher({ name: '', email: '', department: '' });
+      setIsAddingTeacher(false);
+      alert("Teacher profile created successfully.");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'users');
+    }
+  };
+
+  const handleRemoveTeacher = async (uid: string) => {
+    if (!confirm("Are you sure you want to remove this faculty member? All their login access will be restricted.")) return;
+    try {
+      await deleteDoc(doc(db, 'users', uid));
+      alert("Faculty member removed.");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, 'users');
     }
   };
 
@@ -274,44 +311,143 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
       )}
 
       {activeTab === 'users' && (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-            <span className="text-xs font-bold uppercase text-slate-500 tracking-wider">Faculty Roster</span>
-            <span className="text-[10px] font-bold text-slate-400">{teachers.length} Members</span>
+        <div className="space-y-6 animate-in slide-in-from-bottom-5 duration-500">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-bold text-slate-900 tracking-tight">Faculty Management</h3>
+            <button 
+              onClick={() => setIsAddingTeacher(true)}
+              className="py-2 px-4 bg-blue-600 text-white rounded-lg text-xs font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-sm shadow-blue-100"
+            >
+              <Plus className="w-4 h-4" />
+              Add Teacher
+            </button>
           </div>
-          <table className="w-full text-left">
-            <thead className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100">
-              <tr>
-                <th className="px-6 py-3">Name</th>
-                <th className="px-6 py-3">Email</th>
-                <th className="px-6 py-3">Role</th>
-                <th className="px-6 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {teachers.map(teacher => (
-                <tr key={teacher.uid} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-4 font-bold text-slate-900">{teacher.name}</td>
-                  <td className="px-6 py-4 text-slate-500 text-sm">{teacher.email}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
-                      teacher.role === 'admin' ? 'bg-purple-50 text-purple-600 border border-purple-100' : 'bg-blue-50 text-blue-600 border border-blue-100'
-                    }`}>
-                      {teacher.role}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <button 
-                      onClick={() => handleRoleChange(teacher.uid, teacher.role === 'admin' ? 'teacher' : 'admin')}
-                      className="text-[10px] font-bold text-blue-600 hover:text-blue-800 uppercase tracking-widest"
-                    >
-                      Swap Role
+
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+              <span className="text-xs font-bold uppercase text-slate-500 tracking-wider">Faculty Roster</span>
+              <span className="text-[10px] font-bold text-slate-400">{teachers.length} Members</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                  <tr>
+                    <th className="px-6 py-3">Name</th>
+                    <th className="px-6 py-3">Email</th>
+                    <th className="px-6 py-3">Role</th>
+                    <th className="px-6 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {teachers.map(teacher => (
+                    <tr key={teacher.uid} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-6 py-4">
+                        <p className="font-bold text-slate-900">{teacher.name}</p>
+                        {teacher.department && <p className="text-[10px] text-slate-400 font-medium">{teacher.department}</p>}
+                      </td>
+                      <td className="px-6 py-4 text-slate-500 text-sm">{teacher.email}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
+                          teacher.role === 'admin' ? 'bg-purple-50 text-purple-600 border border-purple-100' : 'bg-blue-50 text-blue-600 border border-blue-100'
+                        }`}>
+                          {teacher.role}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center justify-end gap-4">
+                          <button 
+                            onClick={() => handleRoleChange(teacher.uid, teacher.role === 'admin' ? 'teacher' : 'admin')}
+                            className="text-[10px] font-bold text-blue-600 hover:text-blue-800 uppercase tracking-widest"
+                          >
+                            Swap Role
+                          </button>
+                          {teacher.email !== profile.email && (
+                            <button 
+                              onClick={() => handleRemoveTeacher(teacher.uid)}
+                              className="p-1.5 text-slate-300 hover:text-red-500 transition-colors"
+                              title="Remove Teacher"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Add Teacher Modal */}
+          <AnimatePresence>
+            {isAddingTeacher && (
+              <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-slate-200"
+                >
+                  <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                    <h3 className="text-sm font-bold text-slate-900">Add New Teacher</h3>
+                    <button onClick={() => setIsAddingTeacher(false)} className="text-slate-400 hover:text-slate-600">
+                      <X className="w-4 h-4" />
                     </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                  <form onSubmit={handleAddTeacher} className="p-6 space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Full Name</label>
+                      <input 
+                        type="text" 
+                        required
+                        value={newTeacher.name}
+                        onChange={(e) => setNewTeacher({...newTeacher, name: e.target.value})}
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-lg text-sm"
+                        placeholder="e.g. Prof. John Doe"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Official Email</label>
+                      <input 
+                        type="email" 
+                        required
+                        value={newTeacher.email}
+                        onChange={(e) => setNewTeacher({...newTeacher, email: e.target.value})}
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-lg text-sm"
+                        placeholder="teacher@theguideacademy.edu"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Department</label>
+                      <input 
+                        type="text" 
+                        value={newTeacher.department}
+                        onChange={(e) => setNewTeacher({...newTeacher, department: e.target.value})}
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-lg text-sm"
+                        placeholder="e.g. Science, Mathematics"
+                      />
+                    </div>
+                    <div className="flex gap-3 pt-4">
+                      <button 
+                        type="button"
+                        onClick={() => setIsAddingTeacher(false)}
+                        className="flex-1 py-2.5 bg-white text-slate-600 border border-slate-200 rounded-lg text-xs font-bold"
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        type="submit"
+                        className="flex-1 py-2.5 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-slate-800 transition-all shadow-sm"
+                      >
+                        Register Teacher
+                      </button>
+                    </div>
+                  </form>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
         </div>
       )}
 

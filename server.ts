@@ -24,16 +24,27 @@ async function startServer() {
 
   // Vite integration
   if (process.env.NODE_ENV !== "production") {
+    console.log("🛠️ Starting in DEVELOPMENT mode with Vite Middleware");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    console.log("📦 Starting in PRODUCTION mode serving static files");
+    const distPath = path.resolve(__dirname, 'dist');
+    const indexPath = path.join(distPath, 'index.html');
+    
     app.use(express.static(distPath));
+    
+    // SPA Fallback: Send index.html for any other request
     app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+      res.sendFile(indexPath, (err) => {
+        if (err) {
+          console.error(`❌ Error sending index.html: ${err.message}`);
+          res.status(404).send("Application build artifacts not found. Please ensure 'npm run build' was successful.");
+        }
+      });
     });
   }
 
