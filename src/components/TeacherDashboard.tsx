@@ -46,6 +46,7 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
   const [isApplyingLeave, setIsApplyingLeave] = useState(false);
   const [todayRecord, setTodayRecord] = useState<AttendanceRecord | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [locationHelp, setLocationHelp] = useState<'permission' | 'services' | null>(null);
 
   const requestLocation = () => new Promise<GeolocationPosition>((resolve, reject) => {
     if (!navigator.geolocation) {
@@ -73,6 +74,12 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
       }
     }
     return error instanceof Error ? error.message : 'Location could not be checked. Please try again.';
+  };
+
+  const showLocationHelp = (error: unknown) => {
+    const isPermissionError = error instanceof GeolocationPositionError && error.code === error.PERMISSION_DENIED;
+    setLocationHelp(isPermissionError ? 'permission' : 'services');
+    setStatusMsg({ type: 'error', text: locationErrorMessage(error) });
   };
 
   useEffect(() => {
@@ -128,7 +135,7 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
   // If it is declined, the Sign In button always tries again.
   useEffect(() => {
     requestLocation().catch((error) => {
-      setStatusMsg({ type: 'error', text: locationErrorMessage(error) });
+      showLocationHelp(error);
     });
   }, []);
 
@@ -186,6 +193,7 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
           ? locationErrorMessage(error)
           : 'Attendance could not be recorded. Please try again.';
         setStatusMsg({ type: 'error', text: message });
+        if (error instanceof GeolocationPositionError) showLocationHelp(error);
         handleFirestoreError(error, OperationType.WRITE, 'attendance');
       }
     } else {
@@ -200,12 +208,80 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
       setStatusMsg(null);
       setIsScanning(true);
     } catch (error) {
-      setStatusMsg({ type: 'error', text: locationErrorMessage(error) });
+      showLocationHelp(error);
+    }
+  };
+
+  const retryLocationAndContinue = async () => {
+    try {
+      await requestLocation();
+      setLocationHelp(null);
+      setStatusMsg(null);
+      setIsScanning(true);
+    } catch (error) {
+      showLocationHelp(error);
     }
   };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
+      <AnimatePresence>
+        {locationHelp && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[250] bg-slate-950/45 p-4 flex items-center justify-center"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 16, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 16, scale: 0.97 }}
+              className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="location-help-title"
+            >
+              <div className="flex items-start gap-3">
+                <div className="rounded-full bg-rose-100 p-2.5"><AlertCircle className="h-6 w-6 text-rose-600" /></div>
+                <div>
+                  <h3 id="location-help-title" className="text-lg font-bold text-slate-900">Turn on location to continue</h3>
+                  <p className="mt-1 text-sm text-slate-600">Attendance needs your current location to confirm that you are at the institute.</p>
+                </div>
+              </div>
+
+              <div className="mt-5 rounded-xl bg-slate-50 p-4 text-sm text-slate-700">
+                {locationHelp === 'permission' ? (
+                  <>
+                    <p className="font-semibold">Allow this website to use your location:</p>
+                    <ol className="mt-2 list-decimal space-y-1 pl-5">
+                      <li>Tap the lock or settings icon beside the website address.</li>
+                      <li>Choose <strong>Permissions</strong> → <strong>Location</strong> → <strong>Allow</strong>.</li>
+                      <li>Return here and tap the blue button below.</li>
+                    </ol>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-semibold">Turn on your phone's Location/GPS:</p>
+                    <ol className="mt-2 list-decimal space-y-1 pl-5">
+                      <li>Open your phone <strong>Settings</strong>.</li>
+                      <li>Turn on <strong>Location</strong> or <strong>Location Services</strong>.</li>
+                      <li>Return to this app and tap the blue button below.</li>
+                    </ol>
+                  </>
+                )}
+              </div>
+
+              <p className="mt-3 text-xs text-slate-500">On iPhone: Settings → Privacy & Security → Location Services. On Android: Settings → Location.</p>
+              <div className="mt-5 flex gap-3">
+                <button onClick={() => setLocationHelp(null)} className="flex-1 rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700">Not now</button>
+                <button onClick={retryLocationAndContinue} className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">Try location again</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Status Message Toast */}
       <AnimatePresence>
         {statusMsg && (
