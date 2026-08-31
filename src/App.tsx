@@ -14,6 +14,7 @@ import {
   doc, 
   getDoc, 
   setDoc, 
+  updateDoc,
   serverTimestamp 
 } from 'firebase/firestore';
 import { auth, db, googleProvider, handleFirestoreError, OperationType } from './lib/firebase';
@@ -34,12 +35,14 @@ import {
 // Components
 import TeacherDashboard from './components/TeacherDashboard';
 import AdminDashboard from './components/AdminDashboard';
+import ProfileForm from './components/ProfileForm';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -59,6 +62,7 @@ export default function App() {
               name: firebaseUser.displayName || 'Teacher',
               email: firebaseUser.email || '',
               role: isAdminEmail ? 'admin' : 'teacher', 
+              profileCompleted: false,
               createdAt: new Date().toISOString(),
             };
             await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);
@@ -89,6 +93,21 @@ export default function App() {
   };
 
   const handleLogout = () => signOut(auth);
+
+  const saveProfile = async (fields: Pick<UserProfile, 'name' | 'schoolRole' | 'subjects' | 'classes'>) => {
+    if (!profile) return;
+    const updatedProfile: UserProfile = { ...profile, ...fields, profileCompleted: true };
+    await updateDoc(doc(db, 'users', profile.uid), {
+      name: updatedProfile.name,
+      schoolRole: updatedProfile.schoolRole,
+      subjects: updatedProfile.subjects,
+      classes: updatedProfile.classes,
+      profileCompleted: true,
+    });
+    setProfile(updatedProfile);
+  };
+
+  const needsProfile = !!profile && (!profile.profileCompleted || !profile.schoolRole || !profile.name);
 
   if (loading || (user && !profile)) {
     return (
@@ -168,6 +187,10 @@ export default function App() {
             <Calendar className="w-5 h-5" />
             Schedules
           </div>
+          <button onClick={() => setIsEditingProfile(true)} className="w-full p-3 text-slate-600 rounded-xl flex items-center gap-3 font-medium hover:bg-slate-50 transition-colors">
+            <UserCircle className="w-5 h-5" />
+            Profile
+          </button>
           <div className="p-3 text-slate-400 rounded-xl flex items-center gap-3 font-medium cursor-not-allowed opacity-50">
             <Bell className="w-5 h-5" />
             Notifications
@@ -183,12 +206,10 @@ export default function App() {
               <p className="text-xs font-bold text-slate-800 truncate uppercase tracking-wider">{profile?.name}</p>
               <p className="text-[10px] text-slate-500 font-medium capitalize">{profile?.role}</p>
             </div>
-            <button 
-              onClick={handleLogout}
-              className="p-1.5 text-slate-400 hover:text-red-500 transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
+            <div className="flex gap-1">
+              <button onClick={() => setIsEditingProfile(true)} className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors" aria-label="Edit profile"><UserCircle className="w-4 h-4" /></button>
+              <button onClick={handleLogout} className="p-1.5 text-slate-400 hover:text-red-500 transition-colors" aria-label="Sign out"><LogOut className="w-4 h-4" /></button>
+            </div>
           </div>
         </div>
       </aside>
@@ -199,9 +220,10 @@ export default function App() {
           <GraduationCap className="text-blue-600 w-6 h-6" />
           <span className="font-bold text-lg font-display">THE GUIDE ACADEMY</span>
         </div>
-        <button onClick={handleLogout} className="p-2 text-slate-400">
-          <LogOut className="w-5 h-5" />
-        </button>
+        <div className="flex gap-1">
+          <button onClick={() => setIsEditingProfile(true)} className="p-2 text-slate-400" aria-label="Edit profile"><UserCircle className="w-5 h-5" /></button>
+          <button onClick={handleLogout} className="p-2 text-slate-400" aria-label="Sign out"><LogOut className="w-5 h-5" /></button>
+        </div>
       </nav>
 
       {/* Main Content */}
@@ -214,6 +236,15 @@ export default function App() {
           )}
         </AnimatePresence>
       </main>
+
+      {(needsProfile || isEditingProfile) && profile && (
+        <ProfileForm
+          profile={profile}
+          onSave={saveProfile}
+          required={needsProfile}
+          onClose={needsProfile ? undefined : () => setIsEditingProfile(false)}
+        />
+      )}
     </div>
   );
 }
