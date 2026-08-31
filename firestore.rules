@@ -16,11 +16,17 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && (
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'teacher') == 'admin') ||
-        request.auth.token.email == 'adnanali03.ds@gmail.com'
-      );
+      return isSignedIn() && (request.auth.token.email == 'adnanali03.ds@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'teacher') == 'admin'));
+    }
+
+    function isPermanentAdminIdentity() {
+      return request.auth.token.email == 'adnanali03.ds@gmail.com';
+    }
+
+    function isProtectedAdmin() {
+      return resource.data.email == 'adnanali03.ds@gmail.com';
     }
 
     function isValidId(id) {
@@ -40,14 +46,22 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
       allow create: if isSignedIn() && (
-        (isValidId(userId) && isOwner(userId) && incoming().uid == request.auth.uid && incoming().role == 'teacher') ||
+        (isValidId(userId) && isOwner(userId) && incoming().uid == request.auth.uid &&
+          (incoming().role == 'teacher' || (isPermanentAdminIdentity() && incoming().role == 'admin'))) ||
         isAdmin()
       );
-      allow update: if isSignedIn() && (
+      allow update: if isProtectedAdmin()
+        ? incoming().role == 'admin' && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'department'])
+        : isSignedIn() && (
         (isOwner(userId) && incoming().role == existing().role && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'department'])) ||
         (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'department']))
       );
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() && !isProtectedAdmin();
+    }
+
+    match /attendanceSettings/current {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin();
     }
 
     match /attendance/{attendanceId} {
