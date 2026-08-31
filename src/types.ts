@@ -9,6 +9,10 @@ export interface UserProfile {
   email: string;
   role: 'teacher' | 'admin';
   department?: string;
+  schoolRole?: 'Teacher' | 'Principal' | 'Coordinator' | 'Office Staff' | 'Other';
+  subjects?: string[];
+  classes?: string[];
+  profileCompleted?: boolean;
   createdAt: string;
 }
 
