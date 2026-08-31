@@ -19,6 +19,7 @@ import {
   getDoc
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { ATTENDANCE_LOCATION_DOCUMENT, ATTENDANCE_QR_CODE, AttendanceLocation, distanceInMeters } from '../lib/attendance';
 import { UserProfile, AttendanceRecord, LeaveApplication, Announcement } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -102,13 +103,30 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
   ];
 
   const handleScanSuccess = async (qrData: string) => {
-    // In a real app, qrData would be a signed token or a known secret
-    // For this app, any QR with "TGA-SECURE-2026-X7" works
-    if (qrData === "TGA-SECURE-2026-X7") {
+    if (qrData === ATTENDANCE_QR_CODE) {
       setIsScanning(false);
       const today = format(new Date(), 'yyyy-MM-dd');
       
       try {
+        const locationSnapshot = await getDoc(doc(db, 'attendanceSettings', ATTENDANCE_LOCATION_DOCUMENT));
+        if (!locationSnapshot.exists()) {
+          setStatusMsg({ type: 'error', text: 'Attendance location has not been set by an administrator yet.' });
+          return;
+        }
+        const approvedLocation = locationSnapshot.data() as AttendanceLocation;
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15_000, maximumAge: 0 });
+        });
+        const currentLocation = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        };
+        const distanceMeters = distanceInMeters(currentLocation, approvedLocation);
+        if (distanceMeters > approvedLocation.radiusMeters) {
+          setStatusMsg({ type: 'error', text: `You are ${Math.round(distanceMeters)} m from the attendance location. Move within ${approvedLocation.radiusMeters} m and try again.` });
+          return;
+        }
+
         if (!todayRecord) {
           // Check-in
           await addDoc(collection(db, 'attendance'), {
@@ -116,7 +134,8 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
             userName: profile.name,
             date: today,
             timeIn: serverTimestamp(),
-            status: 'present'
+            status: 'present',
+            location: { ...currentLocation, accuracy: position.coords.accuracy, distanceMeters: Math.round(distanceMeters) }
           });
           setStatusMsg({ type: 'success', text: "Checked in successfully! Recognition complete." });
         } else if (!todayRecord.timeOut) {
@@ -129,7 +148,10 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
           setStatusMsg({ type: 'error', text: "You have already finalized your attendance for today." });
         }
       } catch (error) {
-        setStatusMsg({ type: 'error', text: "Authentication failed. Please try again." });
+        const message = error instanceof GeolocationPositionError
+          ? 'Location permission is required to record attendance.'
+          : 'Attendance could not be recorded. Please try again.';
+        setStatusMsg({ type: 'error', text: message });
         handleFirestoreError(error, OperationType.WRITE, 'attendance');
       }
     } else {

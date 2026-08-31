@@ -19,6 +19,7 @@ import {
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { UserProfile, AttendanceRecord, LeaveApplication, Announcement } from '../types';
+import { ATTENDANCE_LOCATION_DOCUMENT, ATTENDANCE_QR_CODE, AttendanceLocation } from '../lib/attendance';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Users, 
@@ -49,6 +50,9 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'leaves' | 'announcements'>('overview');
   const [isAddingTeacher, setIsAddingTeacher] = useState(false);
   const [newTeacher, setNewTeacher] = useState({ name: '', email: '', department: '' });
+  const [attendanceLocation, setAttendanceLocation] = useState<AttendanceLocation | null>(null);
+  const [radiusMeters, setRadiusMeters] = useState(100);
+  const [locationStatus, setLocationStatus] = useState<string | null>(null);
 
   useEffect(() => {
     // Teachers
@@ -65,11 +69,17 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
     const leavesUnsubscribe = onSnapshot(query(collection(db, 'leaves'), orderBy('appliedAt', 'desc')), (snapshot) => {
       setPendingLeaves(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LeaveApplication)));
     });
+    const locationUnsubscribe = onSnapshot(doc(db, 'attendanceSettings', ATTENDANCE_LOCATION_DOCUMENT), (snapshot) => {
+      const location = snapshot.exists() ? snapshot.data() as AttendanceLocation : null;
+      setAttendanceLocation(location);
+      if (location) setRadiusMeters(location.radiusMeters);
+    });
 
     return () => {
       usersUnsubscribe();
       attUnsubscribe();
       leavesUnsubscribe();
+      locationUnsubscribe();
     };
   }, []);
 
@@ -98,11 +108,40 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
   };
 
   const handleRoleChange = async (uid: string, newRole: 'admin' | 'teacher') => {
+    const user = teachers.find((teacher) => teacher.uid === uid);
+    if (user?.email === 'adnanali03.ds@gmail.com') return;
     try {
       await updateDoc(doc(db, 'users', uid), { role: newRole });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'users');
     }
+  };
+
+  const saveAttendanceLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationStatus('This browser does not support location services.');
+      return;
+    }
+    setLocationStatus('Getting your current location…');
+    navigator.geolocation.getCurrentPosition(async (position) => {
+      try {
+        await setDoc(doc(db, 'attendanceSettings', ATTENDANCE_LOCATION_DOCUMENT), {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          radiusMeters,
+          updatedAt: serverTimestamp(),
+          updatedBy: profile.uid,
+        });
+        setLocationStatus(`Attendance location saved with a ${radiusMeters} m radius.`);
+      } catch (error) {
+        setLocationStatus('The attendance location could not be saved.');
+        handleFirestoreError(error, OperationType.WRITE, 'attendanceSettings/current');
+      }
+    }, () => setLocationStatus('Location permission was denied. Please allow it and try again.'), {
+      enableHighAccuracy: true,
+      timeout: 15_000,
+      maximumAge: 0,
+    });
   };
 
   const handleAddTeacher = async (e: FormEvent) => {
@@ -228,7 +267,7 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
                  <div className="bg-white p-6 rounded-xl z-10 shadow-lg relative">
                     <div className="absolute -top-2 -right-2 w-4 h-4 bg-blue-500 rounded-full animate-ping"></div>
                     <QRCodeSVG 
-                      value="TGA-SECURE-2026-X7" 
+                      value={ATTENDANCE_QR_CODE}
                       size={200} 
                       level="H" 
                       includeMargin={true}
@@ -236,9 +275,22 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
                  </div>
               </div>
               <p className="mt-8 text-xs text-slate-400 text-center max-w-xs font-medium italic">
-                Daily dynamic token. Teachers must scan this or enter manual code: 
-                <span className="block mt-2 font-mono text-blue-600 font-bold tracking-widest text-[11px] bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">TGA-SECURE-2026-X7</span>
+                Fixed institution QR. Teachers must scan this code and be at the approved location.
+                <span className="block mt-2 font-mono text-blue-600 font-bold tracking-widest text-[11px] bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">{ATTENDANCE_QR_CODE}</span>
               </p>
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Attendance location</h3>
+              <p className="mt-2 text-sm text-slate-600">Use your current position as the attendance point. Teachers must allow location access and be within the selected radius.</p>
+              <div className="mt-4 flex flex-col sm:flex-row gap-3 sm:items-end">
+                <label className="text-xs font-bold text-slate-500">Allowed radius (50–100 m)
+                  <input type="number" min="50" max="100" value={radiusMeters} onChange={(event) => setRadiusMeters(Math.min(100, Math.max(50, Number(event.target.value) || 50)))} className="mt-1 block w-full sm:w-36 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg" />
+                </label>
+                <button onClick={saveAttendanceLocation} className="py-2.5 px-4 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700">Set to my current location</button>
+              </div>
+              {attendanceLocation && <p className="mt-3 text-xs text-green-700 font-medium">Location is active: {attendanceLocation.radiusMeters} m radius.</p>}
+              {locationStatus && <p className="mt-2 text-xs text-slate-500">{locationStatus}</p>}
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
@@ -355,12 +407,15 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-4">
-                          <button 
-                            onClick={() => handleRoleChange(teacher.uid, teacher.role === 'admin' ? 'teacher' : 'admin')}
-                            className="text-[10px] font-bold text-blue-600 hover:text-blue-800 uppercase tracking-widest"
-                          >
-                            Swap Role
-                          </button>
+                          {teacher.email === 'adnanali03.ds@gmail.com' ? (
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Permanent admin</span>
+                          ) : <>
+                            <button
+                              onClick={() => handleRoleChange(teacher.uid, teacher.role === 'admin' ? 'teacher' : 'admin')}
+                              className="text-[10px] font-bold text-blue-600 hover:text-blue-800 uppercase tracking-widest"
+                            >
+                              Swap Role
+                            </button>
                           {teacher.email !== profile.email && (
                             <button 
                               onClick={() => handleRemoveTeacher(teacher.uid)}
@@ -370,6 +425,7 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
                               <Trash2 className="w-4 h-4" />
                             </button>
                           )}
+                          </>}
                         </div>
                       </td>
                     </tr>
