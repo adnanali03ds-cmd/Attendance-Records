@@ -47,6 +47,34 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
   const [todayRecord, setTodayRecord] = useState<AttendanceRecord | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
+  const requestLocation = () => new Promise<GeolocationPosition>((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('Location services are not supported in this browser.'));
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      timeout: 15_000,
+      maximumAge: 0,
+    });
+  });
+
+  const locationErrorMessage = (error: unknown) => {
+    if (error instanceof GeolocationPositionError) {
+      if (error.code === error.PERMISSION_DENIED) {
+        return 'Location permission is needed for attendance. Please tap Sign In again and choose Allow. If your browser no longer asks, enable Location for this website in your phone browser settings.';
+      }
+      if (error.code === error.POSITION_UNAVAILABLE) {
+        return 'Your location is turned off or unavailable. Turn on Location/GPS, then tap Sign In again.';
+      }
+      if (error.code === error.TIMEOUT) {
+        return 'We could not get your location in time. Move to an open area, turn on GPS, and tap Sign In again.';
+      }
+    }
+    return error instanceof Error ? error.message : 'Location could not be checked. Please try again.';
+  };
+
   useEffect(() => {
     if (statusMsg) {
       const timer = setTimeout(() => setStatusMsg(null), 5000);
@@ -96,6 +124,14 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
     };
   }, [profile.uid]);
 
+  // Ask early, so a teacher sees the permission prompt before trying to scan.
+  // If it is declined, the Sign In button always tries again.
+  useEffect(() => {
+    requestLocation().catch((error) => {
+      setStatusMsg({ type: 'error', text: locationErrorMessage(error) });
+    });
+  }, []);
+
   const statsData = [
     { name: 'Present', value: attendance.length, color: '#3B82F6' },
     { name: 'Absent', value: Math.max(0, 20 - attendance.length - leaves.length), color: '#EF4444' }, // Simplified: assuming 20 working days
@@ -114,9 +150,7 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
           return;
         }
         const approvedLocation = locationSnapshot.data() as AttendanceLocation;
-        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 15_000, maximumAge: 0 });
-        });
+        const position = await requestLocation();
         const currentLocation = {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
@@ -149,7 +183,7 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
         }
       } catch (error) {
         const message = error instanceof GeolocationPositionError
-          ? 'Location permission is required to record attendance.'
+          ? locationErrorMessage(error)
           : 'Attendance could not be recorded. Please try again.';
         setStatusMsg({ type: 'error', text: message });
         handleFirestoreError(error, OperationType.WRITE, 'attendance');
@@ -157,6 +191,16 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
     } else {
       setStatusMsg({ type: 'error', text: "Identification failed. Invalid security code." });
       setIsScanning(false);
+    }
+  };
+
+  const startAttendance = async () => {
+    try {
+      await requestLocation();
+      setStatusMsg(null);
+      setIsScanning(true);
+    } catch (error) {
+      setStatusMsg({ type: 'error', text: locationErrorMessage(error) });
     }
   };
 
@@ -187,7 +231,7 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
         </div>
         <div className="flex gap-3">
           <button 
-            onClick={() => setIsScanning(true)}
+            onClick={startAttendance}
             disabled={todayRecord?.timeOut !== undefined && todayRecord !== null}
             className="flex-1 md:flex-none py-2.5 px-5 bg-blue-600 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 shadow-sm hover:bg-blue-700 transition-all disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
           >
