@@ -1,14 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { UserProfile } from '../types';
+import { TeachingAssignment, UserProfile } from '../types';
 import { CheckCircle2, UserRound, X } from 'lucide-react';
 
 const schoolRoles = ['Teacher', 'Principal', 'Coordinator', 'Office Staff', 'Other'] as const;
+const subjectOptions = ['English', 'Hindi', 'Maths', 'Computer', 'EVS', 'GK', 'Urdu', 'Deeniyat', 'Games'];
+const classOptions = ['Nursery', 'L.K.G', 'U.K.G', 'Class-1', 'Class-2', 'Class-3', 'Class-4'];
 
-type ProfileFields = Pick<UserProfile, 'name' | 'schoolRole' | 'subjects' | 'classes'>;
-
-function splitItems(value: string) {
-  return value.split(',').map((item) => item.trim()).filter(Boolean);
-}
+type ProfileFields = Pick<UserProfile, 'name' | 'schoolRole' | 'schoolRoleOther' | 'subjects' | 'classes' | 'teachingAssignments'>;
 
 export default function ProfileForm({ profile, onSave, onClose, required = false }: {
   profile: UserProfile;
@@ -16,19 +14,40 @@ export default function ProfileForm({ profile, onSave, onClose, required = false
   onClose?: () => void;
   required?: boolean;
 }) {
-  const [name, setName] = useState(profile.name || '');
+  const [name, setName] = useState(required ? '' : profile.name || '');
   const [schoolRole, setSchoolRole] = useState<UserProfile['schoolRole']>(profile.schoolRole);
-  const [subjects, setSubjects] = useState((profile.subjects || []).join(', '));
-  const [classes, setClasses] = useState((profile.classes || []).join(', '));
+  const [schoolRoleOther, setSchoolRoleOther] = useState(profile.schoolRoleOther || '');
+  const [assignments, setAssignments] = useState<TeachingAssignment[]>(profile.teachingAssignments || []);
+  const [selectedSubject, setSelectedSubject] = useState('');
+  const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (schoolRole !== 'Teacher') {
-      setSubjects('');
-      setClasses('');
+      setAssignments([]);
+      setSelectedSubject('');
+      setSelectedClasses([]);
     }
   }, [schoolRole]);
+
+  const toggleSelection = (value: string, current: string[], setCurrent: (items: string[]) => void) => {
+    setCurrent(current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
+  };
+
+  const addAssignment = () => {
+    if (!selectedSubject || !selectedClasses.length) {
+      setError('Select one subject and at least one class before adding the assignment.');
+      return;
+    }
+    setAssignments((current) => {
+      const withoutSubject = current.filter((assignment) => assignment.subject !== selectedSubject);
+      return [...withoutSubject, { subject: selectedSubject, classes: selectedClasses }];
+    });
+    setSelectedSubject('');
+    setSelectedClasses([]);
+    setError(null);
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -36,8 +55,12 @@ export default function ProfileForm({ profile, onSave, onClose, required = false
       setError('Please enter your full name and select your role in the school.');
       return;
     }
-    if (schoolRole === 'Teacher' && (!splitItems(subjects).length || !splitItems(classes).length)) {
-      setError('Please add at least one subject and one class you teach.');
+    if (schoolRole === 'Other' && !schoolRoleOther.trim()) {
+      setError('Please enter your role in the school.');
+      return;
+    }
+    if (schoolRole === 'Teacher' && !assignments.length) {
+      setError('Add at least one subject assignment before saving.');
       return;
     }
 
@@ -47,8 +70,10 @@ export default function ProfileForm({ profile, onSave, onClose, required = false
       await onSave({
         name: name.trim(),
         schoolRole,
-        subjects: schoolRole === 'Teacher' ? splitItems(subjects) : [],
-        classes: schoolRole === 'Teacher' ? splitItems(classes) : [],
+        schoolRoleOther: schoolRole === 'Other' ? schoolRoleOther.trim() : '',
+        teachingAssignments: schoolRole === 'Teacher' ? assignments : [],
+        subjects: schoolRole === 'Teacher' ? assignments.map((assignment) => assignment.subject) : [],
+        classes: schoolRole === 'Teacher' ? Array.from(new Set<string>(assignments.flatMap((assignment) => assignment.classes))) : [],
       });
       onClose?.();
     } catch {
@@ -86,15 +111,27 @@ export default function ProfileForm({ profile, onSave, onClose, required = false
               {schoolRoles.map((role) => <option key={role} value={role}>{role}</option>)}
             </select>
           </label>
+          {schoolRole === 'Other' && <label className="block text-sm font-semibold text-slate-700">Write your role
+            <input value={schoolRoleOther} onChange={(e) => setSchoolRoleOther(e.target.value)} placeholder="e.g. Librarian" className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+          </label>}
           {schoolRole === 'Teacher' && <div className="space-y-4 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
-            <p className="text-sm font-bold text-blue-800">Teaching details</p>
-            <label className="block text-sm font-semibold text-slate-700">Subjects you teach
-              <input value={subjects} onChange={(e) => setSubjects(e.target.value)} placeholder="e.g. Mathematics, Science" className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+            <p className="text-sm font-bold text-blue-800">Add a teaching assignment</p>
+            <label className="block text-sm font-semibold text-slate-700">Subject
+              <select value={selectedSubject} onChange={(event) => setSelectedSubject(event.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+                <option value="">Select a subject</option>
+                {subjectOptions.map((subject) => <option key={subject} value={subject}>{subject}</option>)}
+              </select>
             </label>
-            <label className="block text-sm font-semibold text-slate-700">Classes you teach
-              <input value={classes} onChange={(e) => setClasses(e.target.value)} placeholder="e.g. Class 6, Class 7A" className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+            <label className="block text-sm font-semibold text-slate-700">Classes for {selectedSubject || 'this subject'}
+              <span className="mt-1.5 grid grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-white p-3">
+                {classOptions.map((className) => <label key={className} className="flex items-center gap-2 text-sm font-medium text-slate-700"><input type="checkbox" checked={selectedClasses.includes(className)} onChange={() => toggleSelection(className, selectedClasses, setSelectedClasses)} className="h-4 w-4 rounded border-slate-300 text-blue-600" />{className}</label>)}
+              </span>
             </label>
-            <p className="text-xs text-slate-500">Separate multiple subjects or classes with commas.</p>
+            <button type="button" onClick={addAssignment} className="w-full rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-bold text-blue-700 hover:bg-blue-50">Add subject assignment</button>
+            {assignments.length > 0 && <div className="space-y-2 border-t border-blue-100 pt-4">
+              <p className="text-sm font-bold text-blue-800">Your assignments</p>
+              {assignments.map((assignment) => <div key={assignment.subject} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-sm"><span><strong>{assignment.subject}</strong> → {assignment.classes.join(', ')}</span><button type="button" onClick={() => setAssignments((current) => current.filter((item) => item.subject !== assignment.subject))} className="font-semibold text-rose-600">Remove</button></div>)}
+            </div>}
           </div>}
         </div>
 
