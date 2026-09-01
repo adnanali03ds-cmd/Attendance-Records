@@ -51,7 +51,7 @@ service cloud.firestore {
         isAdmin()
       );
       allow update: if isProtectedAdmin()
-        ? incoming().role == 'admin' && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'department'])
+        ? incoming().role == 'admin' && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'department', 'schoolRole', 'schoolRoleOther', 'subjects', 'classes', 'teachingAssignments', 'profileCompleted'])
         : isSignedIn() && (
         (isOwner(userId) && incoming().role == existing().role && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'department', 'schoolRole', 'schoolRoleOther', 'subjects', 'classes', 'teachingAssignments', 'profileCompleted'])) ||
         (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'department']))
@@ -97,3 +97,4 @@ service cloud.firestore {
     }
   }
 }
+
