@@ -94,7 +94,7 @@ export default function ProfileForm({ profile, onSave, onClose, required = false
               <p className="mt-1 text-sm text-slate-500">Keep your school details accurate for the attendance system.</p>
             </div>
           </div>
-          {!required && onClose && <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button>}
+          {onClose && <button type="button" onClick={onClose} aria-label="Close profile form" title="Close" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><X className="h-5 w-5" /></button>}
         </div>
 
         <div className="mt-6 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
