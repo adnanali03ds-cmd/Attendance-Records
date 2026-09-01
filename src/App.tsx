@@ -94,14 +94,16 @@ export default function App() {
 
   const handleLogout = () => signOut(auth);
 
-  const saveProfile = async (fields: Pick<UserProfile, 'name' | 'schoolRole' | 'subjects' | 'classes'>) => {
+  const saveProfile = async (fields: Pick<UserProfile, 'name' | 'schoolRole' | 'schoolRoleOther' | 'subjects' | 'classes' | 'teachingAssignments'>) => {
     if (!profile) return;
     const updatedProfile: UserProfile = { ...profile, ...fields, profileCompleted: true };
     await updateDoc(doc(db, 'users', profile.uid), {
       name: updatedProfile.name,
       schoolRole: updatedProfile.schoolRole,
+      schoolRoleOther: updatedProfile.schoolRoleOther,
       subjects: updatedProfile.subjects,
       classes: updatedProfile.classes,
+      teachingAssignments: updatedProfile.teachingAssignments,
       profileCompleted: true,
     });
     setProfile(updatedProfile);
@@ -134,9 +136,7 @@ export default function App() {
           animate={{ opacity: 1, y: 0 }}
           className="max-w-sm w-full bg-white p-10 rounded-xl shadow-2xl shadow-slate-200/50 border border-slate-200 flex flex-col items-center text-center"
         >
-          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mb-8 shadow-lg shadow-blue-200">
-            <GraduationCap className="w-10 h-10 text-white" />
-          </div>
+          <img src="/guide-academy-logo.png" alt="The Guide Academy logo" className="w-20 h-20 object-contain mb-7" />
           <h1 className="text-2xl font-bold text-slate-900 mb-2 tracking-tight font-display">THE GUIDE ACADEMY</h1>
           <p className="text-slate-500 mb-10 text-sm font-medium leading-relaxed">Secure, QR-based attendance infrastructure for modern institutions.</p>
           
@@ -171,9 +171,7 @@ export default function App() {
       {/* Sidebar for Desktop */}
       <aside className="hidden md:flex w-64 bg-white border-r border-slate-200 flex-col sticky top-0 h-screen">
         <div className="p-8 flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-200">
-            <GraduationCap className="text-white w-6 h-6" />
-          </div>
+          <img src="/guide-academy-logo.png" alt="The Guide Academy logo" className="w-11 h-11 object-contain" />
           <span className="text-xl font-bold tracking-tight text-slate-900 font-display">THE GUIDE ACADEMY</span>
         </div>
 
@@ -217,7 +215,7 @@ export default function App() {
       {/* Mobile Top Nav */}
       <nav className="md:hidden h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sticky top-0 z-50">
         <div className="flex items-center gap-2">
-          <GraduationCap className="text-blue-600 w-6 h-6" />
+          <img src="/guide-academy-logo.png" alt="The Guide Academy logo" className="w-8 h-8 object-contain" />
           <span className="font-bold text-lg font-display">THE GUIDE ACADEMY</span>
         </div>
         <div className="flex gap-1">
