@@ -10,10 +10,17 @@ export interface UserProfile {
   role: 'teacher' | 'admin';
   department?: string;
   schoolRole?: 'Teacher' | 'Principal' | 'Coordinator' | 'Office Staff' | 'Other';
+  schoolRoleOther?: string;
   subjects?: string[];
   classes?: string[];
+  teachingAssignments?: TeachingAssignment[];
   profileCompleted?: boolean;
   createdAt: string;
+}
+
+export interface TeachingAssignment {
+  subject: string;
+  classes: string[];
 }
 
 export interface AttendanceRecord {
