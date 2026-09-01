@@ -43,6 +43,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [isProfileSetupDismissed, setIsProfileSetupDismissed] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -235,14 +236,18 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      {(needsProfile || isEditingProfile) && profile && (
+      {((needsProfile && !isProfileSetupDismissed) || isEditingProfile) && profile && (
         <ProfileForm
           profile={profile}
           onSave={saveProfile}
           required={needsProfile}
-          onClose={needsProfile ? undefined : () => setIsEditingProfile(false)}
+          onClose={() => {
+            setIsEditingProfile(false);
+            if (needsProfile) setIsProfileSetupDismissed(true);
+          }}
         />
       )}
     </div>
   );
 }
+
