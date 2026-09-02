@@ -45,6 +45,8 @@ export interface LeaveApplication {
   userName: string;
   startDate: string;
   endDate: string;
+  dates?: string[];
+  totalDays?: number;
   reason: string;
   type: 'sick' | 'casual' | 'vacation';
   status: 'pending' | 'approved' | 'rejected';
