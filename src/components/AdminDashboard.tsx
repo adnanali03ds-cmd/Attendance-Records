@@ -19,7 +19,8 @@ import {
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { UserProfile, AttendanceRecord, LeaveApplication, Announcement } from '../types';
-import { ATTENDANCE_LOCATION_DOCUMENT, ATTENDANCE_QR_CODE, AttendanceLocation } from '../lib/attendance';
+import { ATTENDANCE_LOCATION_DOCUMENT, ATTENDANCE_QR_CODE, AttendanceCampus, AttendanceSettings, getConfiguredCampuses } from '../lib/attendance';
+import AttendanceCalendar from './AttendanceCalendar';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Users, 
@@ -53,6 +54,13 @@ const getLeaveDates = (leave: LeaveApplication) => {
 
 const formatLeaveDate = (date: string) => format(new Date(`${date}T00:00:00`), 'MMM d, yyyy');
 
+type CampusDraft = Omit<AttendanceCampus, 'latitude' | 'longitude'> & Partial<Pick<AttendanceCampus, 'latitude' | 'longitude'>>;
+
+const DEFAULT_CAMPUSES: CampusDraft[] = [
+  { id: 'campus-a', name: 'Campus A', radiusMeters: 50, enabled: true },
+  { id: 'campus-b', name: 'Campus B', radiusMeters: 50, enabled: true },
+];
+
 export default function AdminDashboard({ profile }: { profile: UserProfile }) {
   const [teachers, setTeachers] = useState<UserProfile[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
@@ -61,9 +69,9 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'leaves' | 'announcements'>('overview');
   const [isAddingTeacher, setIsAddingTeacher] = useState(false);
   const [newTeacher, setNewTeacher] = useState({ name: '', email: '', department: '' });
-  const [attendanceLocation, setAttendanceLocation] = useState<AttendanceLocation | null>(null);
-  const [radiusMeters, setRadiusMeters] = useState(100);
-  const [locationStatus, setLocationStatus] = useState<string | null>(null);
+  const [campuses, setCampuses] = useState<CampusDraft[]>(DEFAULT_CAMPUSES);
+  const [locationStatus, setLocationStatus] = useState<Record<string, string>>({});
+  const [selectedCalendarTeacher, setSelectedCalendarTeacher] = useState<UserProfile | null>(null);
 
   useEffect(() => {
     // Teachers
@@ -81,9 +89,14 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
       setPendingLeaves(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LeaveApplication)));
     });
     const locationUnsubscribe = onSnapshot(doc(db, 'attendanceSettings', ATTENDANCE_LOCATION_DOCUMENT), (snapshot) => {
-      const location = snapshot.exists() ? snapshot.data() as AttendanceLocation : null;
-      setAttendanceLocation(location);
-      if (location) setRadiusMeters(location.radiusMeters);
+      if (!snapshot.exists()) return;
+      const settings = snapshot.data() as AttendanceSettings;
+      const storedCampuses = Array.isArray(settings.campuses) ? settings.campuses : getConfiguredCampuses(settings);
+      setCampuses(DEFAULT_CAMPUSES.map((defaultCampus, index) => ({
+        ...defaultCampus,
+        ...(storedCampuses.find((campus) => campus.id === defaultCampus.id) || storedCampuses[index] || {}),
+        id: defaultCampus.id,
+      })));
     });
 
     return () => {
@@ -128,27 +141,64 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
     }
   };
 
-  const saveAttendanceLocation = () => {
-    if (!navigator.geolocation) {
-      setLocationStatus('This browser does not support location services.');
+  const updateCampusDraft = (index: number, changes: Partial<CampusDraft>) => {
+    setCampuses((current) => current.map((campus, campusIndex) => campusIndex === index ? { ...campus, ...changes } : campus));
+  };
+
+  const persistCampuses = async (nextCampuses: CampusDraft[], campusId: string, message: string) => {
+    const configuredCampuses = nextCampuses
+      .filter((campus) => Number.isFinite(campus.latitude) && Number.isFinite(campus.longitude))
+      .map((campus) => ({
+        id: campus.id,
+        name: campus.name.trim() || (campus.id === 'campus-a' ? 'Campus A' : 'Campus B'),
+        enabled: campus.enabled,
+        latitude: campus.latitude!,
+        longitude: campus.longitude!,
+        radiusMeters: Math.min(100, Math.max(3, campus.radiusMeters)),
+      }));
+    await setDoc(doc(db, 'attendanceSettings', ATTENDANCE_LOCATION_DOCUMENT), {
+      campuses: configuredCampuses,
+      updatedAt: serverTimestamp(),
+      updatedBy: profile.uid,
+    }, { merge: true });
+    setLocationStatus((current) => ({ ...current, [campusId]: message }));
+  };
+
+  const saveCampusDetails = async (index: number) => {
+    const campus = campuses[index];
+    if (!Number.isFinite(campus.latitude) || !Number.isFinite(campus.longitude)) {
+      setLocationStatus((current) => ({ ...current, [campus.id]: 'Set this campus using your current location first.' }));
       return;
     }
-    setLocationStatus('Getting your current location…');
+    try {
+      await persistCampuses(campuses, campus.id, `${campus.name} settings saved.`);
+    } catch (error) {
+      setLocationStatus((current) => ({ ...current, [campus.id]: 'The campus settings could not be saved.' }));
+      handleFirestoreError(error, OperationType.WRITE, 'attendanceSettings/current');
+    }
+  };
+
+  const saveCampusFromCurrentLocation = (index: number) => {
+    const campus = campuses[index];
+    if (!navigator.geolocation) {
+      setLocationStatus((current) => ({ ...current, [campus.id]: 'This browser does not support location services.' }));
+      return;
+    }
+    setLocationStatus((current) => ({ ...current, [campus.id]: 'Getting your current location…' }));
     navigator.geolocation.getCurrentPosition(async (position) => {
+      const nextCampuses = campuses.map((item, campusIndex) => campusIndex === index ? {
+        ...item,
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      } : item);
+      setCampuses(nextCampuses);
       try {
-        await setDoc(doc(db, 'attendanceSettings', ATTENDANCE_LOCATION_DOCUMENT), {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          radiusMeters,
-          updatedAt: serverTimestamp(),
-          updatedBy: profile.uid,
-        });
-        setLocationStatus(`Attendance location saved with a ${radiusMeters} m radius.`);
+        await persistCampuses(nextCampuses, campus.id, `${campus.name} saved with a ${campus.radiusMeters} m radius.`);
       } catch (error) {
-        setLocationStatus('The attendance location could not be saved.');
+        setLocationStatus((current) => ({ ...current, [campus.id]: 'The campus location could not be saved.' }));
         handleFirestoreError(error, OperationType.WRITE, 'attendanceSettings/current');
       }
-    }, () => setLocationStatus('Location permission was denied. Please allow it and try again.'), {
+    }, () => setLocationStatus((current) => ({ ...current, [campus.id]: 'Location permission was denied. Please allow it and try again.' })), {
       enableHighAccuracy: true,
       timeout: 15_000,
       maximumAge: 0,
@@ -191,7 +241,9 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
       Date: rec.date,
       'Time In': rec.timeIn ? format(rec.timeIn.toDate(), 'hh:mm a') : 'N/A',
       'Time Out': rec.timeOut ? format(rec.timeOut.toDate(), 'hh:mm a') : 'N/A',
-      Status: rec.status
+      Status: rec.status,
+      'Check-in Campus': rec.checkInLocation?.campusName || rec.location?.campusName || 'Previous record',
+      'Check-out Campus': rec.checkOutLocation?.campusName || (rec.timeOut ? 'Previous record' : 'Not checked out'),
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
@@ -292,17 +344,49 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Attendance location</h3>
-              <p className="mt-2 text-sm text-slate-600">Use your current position as the attendance point. Teachers must allow location access and be within the selected radius.</p>
-              <div className="mt-4 flex flex-col sm:flex-row gap-3 sm:items-end">
-                <label className="text-xs font-bold text-slate-500">Allowed radius (3–100 m)
-                  <input type="number" min="3" max="100" value={radiusMeters} onChange={(event) => setRadiusMeters(Math.min(100, Math.max(3, Number(event.target.value) || 3)))} className="mt-1 block w-full sm:w-36 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg" />
-                </label>
-                <button onClick={saveAttendanceLocation} className="py-2.5 px-4 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700">Set to my current location</button>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Campus locations</h3>
+                  <p className="mt-2 text-sm text-slate-600">Stand at each campus and save its position. Teachers can check in or check out from either active campus.</p>
+                </div>
+                <span className="rounded-full bg-blue-50 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-700">2 campuses supported</span>
               </div>
-              <p className="mt-3 text-[11px] text-amber-700">3 m is supported, but phone GPS can be less accurate indoors. Use a wider radius if valid attendance is rejected.</p>
-              {attendanceLocation && <p className="mt-3 text-xs text-green-700 font-medium">Location is active: {attendanceLocation.radiusMeters} m radius.</p>}
-              {locationStatus && <p className="mt-2 text-xs text-slate-500">{locationStatus}</p>}
+              <div className="mt-5 grid gap-4 md:grid-cols-2">
+                {campuses.map((campus, index) => {
+                  const hasLocation = Number.isFinite(campus.latitude) && Number.isFinite(campus.longitude);
+                  return (
+                    <div key={campus.id} className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className={`h-2.5 w-2.5 rounded-full ${hasLocation && campus.enabled ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                        <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                          <input
+                            type="checkbox"
+                            checked={campus.enabled}
+                            onChange={(event) => updateCampusDraft(index, { enabled: event.target.checked })}
+                            className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                          />
+                          Active
+                        </label>
+                      </div>
+                      <label className="mt-3 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Campus name
+                        <input value={campus.name} onChange={(event) => updateCampusDraft(index, { name: event.target.value })} className="mt-1.5 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800" />
+                      </label>
+                      <label className="mt-3 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Allowed radius (3–100 m)
+                        <input type="number" min="3" max="100" value={campus.radiusMeters} onChange={(event) => updateCampusDraft(index, { radiusMeters: Math.min(100, Math.max(3, Number(event.target.value) || 3)) })} className="mt-1.5 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800" />
+                      </label>
+                      <div className="mt-3 rounded-lg bg-white px-3 py-2 text-[10px] text-slate-500">
+                        {hasLocation ? `${campus.latitude!.toFixed(6)}, ${campus.longitude!.toFixed(6)}` : 'Location has not been set yet.'}
+                      </div>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        <button onClick={() => saveCampusFromCurrentLocation(index)} className="rounded-lg bg-blue-600 px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-white hover:bg-blue-700">Use my location</button>
+                        <button onClick={() => saveCampusDetails(index)} disabled={!hasLocation} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-600 hover:bg-slate-100 disabled:opacity-40">Save changes</button>
+                      </div>
+                      {locationStatus[campus.id] && <p className="mt-2 text-[11px] font-medium text-slate-600">{locationStatus[campus.id]}</p>}
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="mt-4 text-[11px] text-amber-700">A 3 m radius is supported, but phone GPS can be less accurate indoors. Increase it if valid attendance is rejected.</p>
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
@@ -406,7 +490,15 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
                   {teachers.map(teacher => (
                     <tr key={teacher.uid} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4">
-                        <p className="font-bold text-slate-900">{teacher.name}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-bold text-slate-900">{teacher.name}</p>
+                          <button
+                            onClick={() => setSelectedCalendarTeacher(teacher)}
+                            className="inline-flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-blue-700 hover:bg-blue-100"
+                          >
+                            <Calendar className="h-3 w-3" /> Calendar
+                          </button>
+                        </div>
                         {teacher.department && <p className="text-[10px] text-slate-400 font-medium">{teacher.department}</p>}
                       </td>
                       <td className="px-6 py-4 text-slate-500 text-sm">{teacher.email}</td>
@@ -619,6 +711,31 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
           </form>
         </div>
       )}
+
+      <AnimatePresence>
+        {selectedCalendarTeacher && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[180] overflow-y-auto bg-slate-950/55 p-3 backdrop-blur-sm sm:p-6"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.98 }}
+              className="mx-auto max-w-6xl"
+            >
+              <AttendanceCalendar
+                profile={selectedCalendarTeacher}
+                attendance={attendance.filter((record) => record.userId === selectedCalendarTeacher.uid)}
+                leaves={pendingLeaves.filter((leave) => leave.userId === selectedCalendarTeacher.uid)}
+                onClose={() => setSelectedCalendarTeacher(null)}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

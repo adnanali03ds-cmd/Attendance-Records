@@ -9,6 +9,64 @@ export interface AttendanceLocation {
   updatedBy?: string;
 }
 
+export interface AttendanceCampus extends AttendanceLocation {
+  id: string;
+  name: string;
+  enabled: boolean;
+}
+
+export interface AttendanceSettings extends Partial<AttendanceLocation> {
+  campuses?: AttendanceCampus[];
+}
+
+export interface CampusMatch {
+  campus: AttendanceCampus;
+  distanceMeters: number;
+}
+
+export function getConfiguredCampuses(settings: AttendanceSettings | null): AttendanceCampus[] {
+  if (!settings) return [];
+
+  if (Array.isArray(settings.campuses)) {
+    return settings.campuses.filter((campus) =>
+      campus.enabled !== false
+      && Number.isFinite(campus.latitude)
+      && Number.isFinite(campus.longitude)
+      && Number.isFinite(campus.radiusMeters)
+    );
+  }
+
+  if (
+    Number.isFinite(settings.latitude)
+    && Number.isFinite(settings.longitude)
+    && Number.isFinite(settings.radiusMeters)
+  ) {
+    return [{
+      id: 'campus-a',
+      name: 'Campus A',
+      enabled: true,
+      latitude: settings.latitude!,
+      longitude: settings.longitude!,
+      radiusMeters: settings.radiusMeters!,
+      updatedAt: settings.updatedAt,
+      updatedBy: settings.updatedBy,
+    }];
+  }
+
+  return [];
+}
+
+export function findNearestCampus(
+  currentLocation: Pick<AttendanceLocation, 'latitude' | 'longitude'>,
+  campuses: AttendanceCampus[],
+): CampusMatch | null {
+  return campuses.reduce<CampusMatch | null>((nearest, campus) => {
+    const distanceMeters = distanceInMeters(currentLocation, campus);
+    if (!nearest || distanceMeters < nearest.distanceMeters) return { campus, distanceMeters };
+    return nearest;
+  }, null);
+}
+
 export function distanceInMeters(
   from: Pick<AttendanceLocation, 'latitude' | 'longitude'>,
   to: Pick<AttendanceLocation, 'latitude' | 'longitude'>,

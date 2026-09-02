@@ -31,12 +31,18 @@ export interface AttendanceRecord {
   timeIn: any; // Firestore Timestamp
   timeOut?: any; // Firestore Timestamp
   status: 'present' | 'late';
-  location?: {
-    latitude: number;
-    longitude: number;
-    accuracy: number;
-    distanceMeters: number;
-  };
+  location?: AttendancePunchLocation;
+  checkInLocation?: AttendancePunchLocation;
+  checkOutLocation?: AttendancePunchLocation;
+}
+
+export interface AttendancePunchLocation {
+  campusId?: string;
+  campusName?: string;
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  distanceMeters: number;
 }
 
 export interface LeaveApplication {

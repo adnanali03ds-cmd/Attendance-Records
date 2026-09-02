@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   collection, 
   query, 
@@ -19,7 +19,8 @@ import {
   getDoc
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { ATTENDANCE_LOCATION_DOCUMENT, ATTENDANCE_QR_CODE, AttendanceLocation, distanceInMeters } from '../lib/attendance';
+import { ATTENDANCE_LOCATION_DOCUMENT, ATTENDANCE_QR_CODE, AttendanceSettings, findNearestCampus, getConfiguredCampuses } from '../lib/attendance';
+import { buildAttendanceYear } from '../lib/attendanceCalendar';
 import { UserProfile, AttendanceRecord, LeaveApplication, Announcement } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -37,6 +38,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recha
 import { format } from 'date-fns';
 import QRScanner from './QRScanner';
 import LeaveForm from './LeaveForm';
+import AttendanceCalendar from './AttendanceCalendar';
 
 export default function TeacherDashboard({ profile }: { profile: UserProfile }) {
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
@@ -139,10 +141,17 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
     });
   }, []);
 
+  const currentYearModel = useMemo(
+    () => buildAttendanceYear(attendance, leaves, new Date().getFullYear(), profile.createdAt),
+    [attendance, leaves, profile.createdAt],
+  );
+  const attendanceRate = currentYearModel.summary.present + currentYearModel.summary.absent > 0
+    ? Math.round((currentYearModel.summary.present / (currentYearModel.summary.present + currentYearModel.summary.absent)) * 100)
+    : 0;
   const statsData = [
-    { name: 'Present', value: attendance.length, color: '#3B82F6' },
-    { name: 'Absent', value: Math.max(0, 20 - attendance.length - leaves.length), color: '#EF4444' }, // Simplified: assuming 20 working days
-    { name: 'Leaves', value: leaves.filter(l => l.status === 'approved').length, color: '#F59E0B' },
+    { name: 'Present', value: currentYearModel.summary.present, color: '#10B981' },
+    { name: 'Absent', value: currentYearModel.summary.absent, color: '#EF4444' },
+    { name: 'Leaves', value: currentYearModel.summary.leave, color: '#F59E0B' },
   ];
 
   const handleScanSuccess = async (qrData: string) => {
@@ -156,17 +165,31 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
           setStatusMsg({ type: 'error', text: 'Attendance location has not been set by an administrator yet.' });
           return;
         }
-        const approvedLocation = locationSnapshot.data() as AttendanceLocation;
+        const campuses = getConfiguredCampuses(locationSnapshot.data() as AttendanceSettings);
+        if (campuses.length === 0) {
+          setStatusMsg({ type: 'error', text: 'No active campus location has been set by an administrator yet.' });
+          return;
+        }
         const position = await requestLocation();
         const currentLocation = {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
         };
-        const distanceMeters = distanceInMeters(currentLocation, approvedLocation);
-        if (distanceMeters > approvedLocation.radiusMeters) {
-          setStatusMsg({ type: 'error', text: `You are ${Math.round(distanceMeters)} m from the attendance location. Move within ${approvedLocation.radiusMeters} m and try again.` });
+        const nearestMatch = findNearestCampus(currentLocation, campuses);
+        if (!nearestMatch || nearestMatch.distanceMeters > nearestMatch.campus.radiusMeters) {
+          const nearestMessage = nearestMatch
+            ? ` The nearest is ${nearestMatch.campus.name}, ${Math.round(nearestMatch.distanceMeters)} m away.`
+            : '';
+          setStatusMsg({ type: 'error', text: `You are outside all approved campus areas.${nearestMessage}` });
           return;
         }
+        const punchLocation = {
+          ...currentLocation,
+          accuracy: position.coords.accuracy,
+          campusId: nearestMatch.campus.id,
+          campusName: nearestMatch.campus.name,
+          distanceMeters: Math.round(nearestMatch.distanceMeters),
+        };
 
         if (!todayRecord) {
           // Check-in
@@ -176,15 +199,17 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
             date: today,
             timeIn: serverTimestamp(),
             status: 'present',
-            location: { ...currentLocation, accuracy: position.coords.accuracy, distanceMeters: Math.round(distanceMeters) }
+            location: punchLocation,
+            checkInLocation: punchLocation,
           });
-          setStatusMsg({ type: 'success', text: "Checked in successfully! Recognition complete." });
+          setStatusMsg({ type: 'success', text: `Checked in successfully at ${nearestMatch.campus.name}.` });
         } else if (!todayRecord.timeOut) {
-          // Check-out
+          // Check-out may happen at either approved campus, regardless of check-in campus.
           await updateDoc(doc(db, 'attendance', todayRecord.id), {
-            timeOut: serverTimestamp()
+            timeOut: serverTimestamp(),
+            checkOutLocation: punchLocation,
           });
-          setStatusMsg({ type: 'success', text: "Checked out successfully! Have a good day." });
+          setStatusMsg({ type: 'success', text: `Checked out successfully at ${nearestMatch.campus.name}. Have a good day.` });
         } else {
           setStatusMsg({ type: 'error', text: "You have already finalized your attendance for today." });
         }
@@ -324,23 +349,24 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
         </div>
       </div>
 
+      <AttendanceCalendar profile={profile} attendance={attendance} leaves={leaves} />
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Stats & Chart */}
         <div className="lg:col-span-2 space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             <StatsCard 
               label="Present Days"
-              value={attendance.length.toString()}
-              subValue="/ 120"
+              value={currentYearModel.summary.present.toString()}
+              subValue={`/ ${currentYearModel.summary.workingDays}`}
             />
             <StatsCard 
               label="Attendance Rate"
-              value={`${Math.round((attendance.length / (attendance.length + 5 || 1)) * 100)}%`}
-              change="+2.1%"
+              value={`${attendanceRate}%`}
             />
             <StatsCard 
               label="Approved Leaves"
-              value={leaves.filter(l => l.status === 'approved').length.toString()}
+              value={currentYearModel.summary.leave.toString()}
               valueColor="text-amber-600"
             />
           </div>
@@ -392,6 +418,7 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
                       <th className="px-6 py-3">Day</th>
                       <th className="px-6 py-3 text-center">Time In</th>
                       <th className="px-6 py-3 text-center">Time Out</th>
+                      <th className="px-6 py-3">Campuses</th>
                       <th className="px-6 py-3 text-right">Status</th>
                     </tr>
                   </thead>
@@ -405,6 +432,11 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
                         </td>
                         <td className="px-6 py-4 text-center font-mono text-slate-400 text-xs">
                           {record.timeOut ? format(record.timeOut.toDate(), 'hh:mm a') : 'PENDING'}
+                        </td>
+                        <td className="px-6 py-4 text-[10px] font-semibold text-slate-500">
+                          <span>{record.checkInLocation?.campusName || record.location?.campusName || 'Previous record'}</span>
+                          <span className="mx-1 text-slate-300">→</span>
+                          <span>{record.checkOutLocation?.campusName || (record.timeOut ? 'Previous record' : 'Active')}</span>
                         </td>
                         <td className="px-6 py-4 text-right">
                           <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${

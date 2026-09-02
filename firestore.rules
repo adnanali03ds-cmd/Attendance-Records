@@ -76,7 +76,7 @@ service cloud.firestore {
                       incoming().keys().hasAll(['userId', 'userName', 'date', 'timeIn', 'status']) &&
                       incoming().userId == request.auth.uid;
       allow update: if isSignedIn() && (
-        (resource.data.userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['timeOut'])) ||
+        (resource.data.userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['timeOut', 'checkOutLocation'])) ||
         isAdmin()
       );
     }
