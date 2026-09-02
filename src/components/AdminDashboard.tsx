@@ -39,8 +39,19 @@ import {
   X
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import { format } from 'date-fns';
+import { eachDayOfInterval, format } from 'date-fns';
 import * as XLSX from 'xlsx';
+
+const getLeaveDates = (leave: LeaveApplication) => {
+  if (leave.dates?.length) return leave.dates;
+  if (!leave.startDate || !leave.endDate || leave.endDate < leave.startDate) return [];
+  return eachDayOfInterval({
+    start: new Date(`${leave.startDate}T00:00:00`),
+    end: new Date(`${leave.endDate}T00:00:00`),
+  }).map((date) => format(date, 'yyyy-MM-dd'));
+};
+
+const formatLeaveDate = (date: string) => format(new Date(`${date}T00:00:00`), 'MMM d, yyyy');
 
 export default function AdminDashboard({ profile }: { profile: UserProfile }) {
   const [teachers, setTeachers] = useState<UserProfile[]>([]);
@@ -284,11 +295,12 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
               <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Attendance location</h3>
               <p className="mt-2 text-sm text-slate-600">Use your current position as the attendance point. Teachers must allow location access and be within the selected radius.</p>
               <div className="mt-4 flex flex-col sm:flex-row gap-3 sm:items-end">
-                <label className="text-xs font-bold text-slate-500">Allowed radius (50–100 m)
-                  <input type="number" min="50" max="100" value={radiusMeters} onChange={(event) => setRadiusMeters(Math.min(100, Math.max(50, Number(event.target.value) || 50)))} className="mt-1 block w-full sm:w-36 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg" />
+                <label className="text-xs font-bold text-slate-500">Allowed radius (3–100 m)
+                  <input type="number" min="3" max="100" value={radiusMeters} onChange={(event) => setRadiusMeters(Math.min(100, Math.max(3, Number(event.target.value) || 3)))} className="mt-1 block w-full sm:w-36 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg" />
                 </label>
                 <button onClick={saveAttendanceLocation} className="py-2.5 px-4 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700">Set to my current location</button>
               </div>
+              <p className="mt-3 text-[11px] text-amber-700">3 m is supported, but phone GPS can be less accurate indoors. Use a wider radius if valid attendance is rejected.</p>
               {attendanceLocation && <p className="mt-3 text-xs text-green-700 font-medium">Location is active: {attendanceLocation.radiusMeters} m radius.</p>}
               {locationStatus && <p className="mt-2 text-xs text-slate-500">{locationStatus}</p>}
             </div>
@@ -519,9 +531,20 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
                   </div>
                   <span className="text-[10px] text-slate-300 font-bold">{format(leave.appliedAt.toDate(), 'MMM dd')}</span>
                 </div>
-                <div className="flex items-center gap-2 mb-4">
-                   <Calendar className="w-3 h-3 text-slate-400" />
-                   <p className="text-xs font-semibold text-slate-600">{leave.startDate} to {leave.endDate}</p>
+                <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-blue-600" />
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-blue-500">Complete leave period</p>
+                        <p className="mt-0.5 text-sm font-bold text-slate-800">{formatLeaveDate(leave.startDate)} – {formatLeaveDate(leave.endDate)}</p>
+                      </div>
+                    </div>
+                    <span className="rounded-full bg-blue-600 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-white">{leave.totalDays || getLeaveDates(leave).length} {(leave.totalDays || getLeaveDates(leave).length) === 1 ? 'day' : 'days'}</span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {getLeaveDates(leave).map((date) => <span key={date} className="rounded-full border border-blue-100 bg-white px-2.5 py-1 text-[10px] font-semibold text-slate-600">{format(new Date(`${date}T00:00:00`), 'EEE, MMM d')}</span>)}
+                  </div>
                 </div>
                 <div className="p-4 bg-slate-50 rounded-lg border border-slate-100 italic">
                   <p className="text-xs text-slate-500 leading-relaxed">"{leave.reason}"</p>
