@@ -35,10 +35,21 @@ import {
   Bell
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-import { format } from 'date-fns';
+import { eachDayOfInterval, format } from 'date-fns';
 import QRScanner from './QRScanner';
 import LeaveForm from './LeaveForm';
 import AttendanceCalendar from './AttendanceCalendar';
+
+const getLeaveDates = (leave: LeaveApplication) => {
+  if (leave.dates?.length) return leave.dates;
+  if (!leave.startDate || !leave.endDate || leave.endDate < leave.startDate) return [];
+  return eachDayOfInterval({
+    start: new Date(`${leave.startDate}T00:00:00`),
+    end: new Date(`${leave.endDate}T00:00:00`),
+  }).map((date) => format(date, 'yyyy-MM-dd'));
+};
+
+const formatLeaveDate = (date: string) => format(new Date(`${date}T00:00:00`), 'MMM d, yyyy');
 
 export default function TeacherDashboard({ profile }: { profile: UserProfile }) {
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
@@ -488,19 +499,38 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
               {leaves.length === 0 ? (
                 <p className="text-center py-8 text-slate-400 text-sm italic">No requests filed.</p>
               ) : (
-                leaves.slice(0, 4).map((leave) => (
-                  <div key={leave.id} className="p-3 bg-slate-50 rounded-lg flex justify-between items-center">
-                    <div className="flex flex-col">
-                      <span className="text-xs font-medium text-slate-700 italic">{leave.type} ({format(new Date(leave.startDate), 'MMM dd')})</span>
+                leaves.slice(0, 4).map((leave) => {
+                  const requestedDates = getLeaveDates(leave);
+                  const totalDays = leave.totalDays || requestedDates.length;
+                  return (
+                    <div key={leave.id} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{leave.type} leave</span>
+                          <p className="mt-1 text-sm font-bold text-slate-800">{formatLeaveDate(leave.startDate)} – {formatLeaveDate(leave.endDate)}</p>
+                        </div>
+                        <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${
+                          leave.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
+                          leave.status === 'rejected' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'
+                        }`}>
+                          {leave.status}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex items-center gap-2 text-xs font-bold text-blue-700">
+                        <Calendar className="h-4 w-4" />
+                        {totalDays} {totalDays === 1 ? 'day' : 'days'} requested
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {requestedDates.map((date) => (
+                          <span key={date} className="rounded-full border border-blue-100 bg-white px-2.5 py-1 text-[10px] font-semibold text-slate-600">
+                            {format(new Date(`${date}T00:00:00`), 'EEE, MMM d')}
+                          </span>
+                        ))}
+                      </div>
+                      <p className="mt-3 text-xs italic leading-relaxed text-slate-500">“{leave.reason}”</p>
                     </div>
-                    <span className={`text-[10px] font-bold uppercase ${
-                      leave.status === 'approved' ? 'text-green-600' :
-                      leave.status === 'rejected' ? 'text-rose-600' : 'text-slate-400'
-                    }`}>
-                      {leave.status}
-                    </span>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
