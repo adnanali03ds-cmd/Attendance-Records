@@ -57,6 +57,7 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [isApplyingLeave, setIsApplyingLeave] = useState(false);
+  const [isAttendanceCalendarOpen, setIsAttendanceCalendarOpen] = useState(false);
   const [todayRecord, setTodayRecord] = useState<AttendanceRecord | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [locationHelp, setLocationHelp] = useState<'permission' | 'services' | null>(null);
@@ -341,7 +342,7 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
           <h2 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight font-display">Teacher Dashboard</h2>
           <p className="text-slate-500 mt-1 font-medium">Academic Term: Spring 2026 • <span className="text-green-600 font-semibold">Ready for Classes</span></p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           <button 
             onClick={startAttendance}
             disabled={todayRecord?.timeOut !== undefined && todayRecord !== null}
@@ -350,7 +351,14 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
             <QrCode className="w-4 h-4" />
             {todayRecord ? (todayRecord.timeOut ? 'Already Signed Out' : 'Sign Out') : 'Sign In'}
           </button>
-          <button 
+          <button
+            onClick={() => setIsAttendanceCalendarOpen(true)}
+            className="flex-1 md:flex-none py-2.5 px-5 bg-white text-blue-700 border border-blue-200 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 hover:bg-blue-50 transition-all shadow-sm"
+          >
+            <Calendar className="w-4 h-4" />
+            Attendance Calendar
+          </button>
+          <button
             onClick={() => setIsApplyingLeave(true)}
             className="flex-1 md:flex-none py-2.5 px-5 bg-white text-slate-700 border border-slate-200 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 hover:bg-slate-50 transition-all shadow-sm"
           >
@@ -359,8 +367,6 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
           </button>
         </div>
       </div>
-
-      <AttendanceCalendar profile={profile} attendance={attendance} leaves={leaves} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Stats & Chart */}
@@ -538,6 +544,19 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
       </div>
 
       {/* Modals */}
+      {isAttendanceCalendarOpen && (
+        <div className="fixed inset-0 z-[180] overflow-y-auto bg-slate-950/55 p-3 backdrop-blur-sm sm:p-6">
+          <div className="mx-auto max-w-2xl">
+            <AttendanceCalendar
+              profile={profile}
+              attendance={attendance}
+              leaves={leaves}
+              mode="month"
+              onClose={() => setIsAttendanceCalendarOpen(false)}
+            />
+          </div>
+        </div>
+      )}
       {isScanning && (
         <QRScanner onClose={() => setIsScanning(false)} onScan={handleScanSuccess} />
       )}

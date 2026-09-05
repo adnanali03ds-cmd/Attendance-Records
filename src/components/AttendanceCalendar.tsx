@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { eachDayOfInterval, endOfMonth, format, getDay, startOfMonth } from 'date-fns';
+import { addMonths, eachDayOfInterval, endOfMonth, format, getDay, isSameMonth, startOfMonth } from 'date-fns';
 import { CalendarDays, ChevronLeft, ChevronRight, Clock, MapPin, X } from 'lucide-react';
 import { buildAttendanceYear } from '../lib/attendanceCalendar';
 import { AttendanceRecord, LeaveApplication, UserProfile } from '../types';
@@ -9,6 +9,7 @@ interface AttendanceCalendarProps {
   attendance: AttendanceRecord[];
   leaves: LeaveApplication[];
   onClose?: () => void;
+  mode?: 'year' | 'month';
 }
 
 const statusStyles = {
@@ -20,20 +21,37 @@ const statusStyles = {
 
 const timestampLabel = (value: any) => value?.toDate ? format(value.toDate(), 'hh:mm a') : 'Not recorded';
 
-export default function AttendanceCalendar({ profile, attendance, leaves, onClose }: AttendanceCalendarProps) {
+export default function AttendanceCalendar({ profile, attendance, leaves, onClose, mode = 'year' }: AttendanceCalendarProps) {
   const [year, setYear] = useState(new Date().getFullYear());
+  const [visibleMonth, setVisibleMonth] = useState(startOfMonth(new Date()));
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const modelYear = mode === 'month' ? visibleMonth.getFullYear() : year;
   const model = useMemo(
-    () => buildAttendanceYear(attendance, leaves, year, profile.createdAt),
-    [attendance, leaves, profile.createdAt, year],
+    () => buildAttendanceYear(attendance, leaves, modelYear, profile.createdAt),
+    [attendance, leaves, profile.createdAt, modelYear],
   );
   const months = useMemo(
-    () => Array.from({ length: 12 }, (_, month) => new Date(year, month, 1)),
-    [year],
+    () => mode === 'month'
+      ? [visibleMonth]
+      : Array.from({ length: 12 }, (_, month) => new Date(year, month, 1)),
+    [mode, visibleMonth, year],
   );
+  const displayedSummary = useMemo(() => {
+    if (mode === 'year') return model.summary;
+    const monthPrefix = format(visibleMonth, 'yyyy-MM');
+    const summary = { present: 0, absent: 0, leave: 0, workingDays: 0 };
+    model.days.forEach((day) => {
+      if (!day.dateKey.startsWith(monthPrefix)) return;
+      if (day.status === 'present') summary.present += 1;
+      if (day.status === 'absent') summary.absent += 1;
+      if (day.status === 'leave') summary.leave += 1;
+    });
+    summary.workingDays = summary.present + summary.absent + summary.leave;
+    return summary;
+  }, [mode, model, visibleMonth]);
   const selected = selectedDate ? model.days.get(selectedDate) : undefined;
 
-  useEffect(() => setSelectedDate(null), [profile.uid, year]);
+  useEffect(() => setSelectedDate(null), [profile.uid, year, visibleMonth]);
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
@@ -41,26 +59,28 @@ export default function AttendanceCalendar({ profile, attendance, leaves, onClos
         <div className="flex items-center gap-3">
           <div className="rounded-xl bg-blue-100 p-2.5"><CalendarDays className="h-5 w-5 text-blue-700" /></div>
           <div>
-            <h3 className="font-bold text-slate-900">{profile.name}'s attendance calendar</h3>
+            <h3 className="font-bold text-slate-900">{mode === 'month' ? `${format(visibleMonth, 'MMMM yyyy')} attendance` : `${profile.name}'s attendance calendar`}</h3>
             <p className="text-xs text-slate-500">Green is present, red is absent, and orange is approved leave.</p>
           </div>
         </div>
         <div className="flex items-center justify-between gap-2 sm:justify-end">
-          <button onClick={() => setYear((value) => value - 1)} className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 hover:text-blue-600" aria-label="Previous year"><ChevronLeft className="h-4 w-4" /></button>
-          <span className="min-w-16 text-center text-sm font-bold text-slate-800">{year}</span>
-          <button onClick={() => setYear((value) => value + 1)} disabled={year >= new Date().getFullYear()} className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 hover:text-blue-600 disabled:opacity-30" aria-label="Next year"><ChevronRight className="h-4 w-4" /></button>
+          {mode === 'year' && <>
+            <button onClick={() => setYear((value) => value - 1)} className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 hover:text-blue-600" aria-label="Previous year"><ChevronLeft className="h-4 w-4" /></button>
+            <span className="min-w-16 text-center text-sm font-bold text-slate-800">{year}</span>
+            <button onClick={() => setYear((value) => value + 1)} disabled={year >= new Date().getFullYear()} className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 hover:text-blue-600 disabled:opacity-30" aria-label="Next year"><ChevronRight className="h-4 w-4" /></button>
+          </>}
           {onClose && <button onClick={onClose} className="ml-2 rounded-lg p-2 text-slate-400 hover:bg-slate-200 hover:text-slate-700" aria-label="Close calendar"><X className="h-5 w-5" /></button>}
         </div>
       </div>
 
       <div className="p-4 sm:p-6">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className={mode === 'month' ? 'mx-auto grid max-w-xl grid-cols-1 gap-4' : 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3'}>
           {months.map((month) => {
             const leadingBlanks = (getDay(startOfMonth(month)) + 6) % 7;
             const dates = eachDayOfInterval({ start: startOfMonth(month), end: endOfMonth(month) });
             return (
               <div key={month.toISOString()} className="rounded-xl border border-slate-100 bg-white p-3 shadow-sm">
-                <h4 className="mb-2 text-center text-xs font-bold uppercase tracking-widest text-slate-600">{format(month, 'MMMM')}</h4>
+                <h4 className="mb-2 text-center text-xs font-bold uppercase tracking-widest text-slate-600">{format(month, mode === 'month' ? 'MMMM yyyy' : 'MMMM')}</h4>
                 <div className="grid grid-cols-7 gap-1 text-center text-[9px] font-bold uppercase text-slate-300">
                   {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}
                 </div>
@@ -86,6 +106,17 @@ export default function AttendanceCalendar({ profile, attendance, leaves, onClos
           })}
         </div>
 
+        {mode === 'month' && (
+          <div className="mx-auto mt-5 flex max-w-xl items-center justify-between gap-3">
+            <button onClick={() => setVisibleMonth((month) => addMonths(month, -1))} className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50">
+              <ChevronLeft className="h-4 w-4" /> Previous Month
+            </button>
+            <button onClick={() => setVisibleMonth((month) => addMonths(month, 1))} disabled={isSameMonth(visibleMonth, new Date())} className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400">
+              Next Month <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
         {selected && (
           <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -103,10 +134,10 @@ export default function AttendanceCalendar({ profile, attendance, leaves, onClos
         )}
 
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <SummaryCard label="Days present" value={model.summary.present} className="bg-emerald-50 text-emerald-700" />
-          <SummaryCard label="Days absent" value={model.summary.absent} className="bg-rose-50 text-rose-700" />
-          <SummaryCard label="Approved leave" value={model.summary.leave} className="bg-amber-50 text-amber-700" />
-          <SummaryCard label="Working days" value={model.summary.workingDays} className="bg-blue-50 text-blue-700" />
+          <SummaryCard label="Days present" value={displayedSummary.present} className="bg-emerald-50 text-emerald-700" />
+          <SummaryCard label="Days absent" value={displayedSummary.absent} className="bg-rose-50 text-rose-700" />
+          <SummaryCard label="Approved leave" value={displayedSummary.leave} className="bg-amber-50 text-amber-700" />
+          <SummaryCard label="Working days" value={displayedSummary.workingDays} className="bg-blue-50 text-blue-700" />
         </div>
         <p className="mt-3 text-[10px] text-slate-400">Sundays, future dates, and dates before this profile was created are not counted as absences.</p>
       </div>
