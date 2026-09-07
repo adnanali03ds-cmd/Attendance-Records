@@ -8,11 +8,12 @@ const classOptions = ['Nursery', 'L.K.G', 'U.K.G', 'Class-1', 'Class-2', 'Class-
 
 type ProfileFields = Pick<UserProfile, 'name' | 'schoolRole' | 'schoolRoleOther' | 'subjects' | 'classes' | 'teachingAssignments'>;
 
-export default function ProfileForm({ profile, onSave, onClose, required = false }: {
+export default function ProfileForm({ profile, onSave, onClose, required = false, embedded = false }: {
   profile: UserProfile;
   onSave: (fields: ProfileFields) => Promise<void>;
   onClose?: () => void;
   required?: boolean;
+  embedded?: boolean;
 }) {
   const [name, setName] = useState(required ? '' : profile.name || '');
   const [schoolRole, setSchoolRole] = useState<UserProfile['schoolRole']>(profile.schoolRole);
@@ -84,11 +85,11 @@ export default function ProfileForm({ profile, onSave, onClose, required = false
   };
 
   return (
-    <div className={required ? 'fixed inset-0 z-[300] flex items-center justify-center overflow-hidden bg-[#111224]/65 p-3 backdrop-blur-md sm:p-6' : 'p-1'}>
+    <div className={required ? 'fixed inset-0 z-[300] flex items-center justify-center overflow-hidden bg-[#111224]/65 p-3 backdrop-blur-md sm:p-6' : embedded ? 'profile-editor-page' : 'p-1'}>
       <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-violet-500/25 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-24 -right-16 h-80 w-80 rounded-full bg-cyan-400/20 blur-3xl" />
 
-      <form onSubmit={submit} className="relative flex max-h-[calc(100vh-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-[30px] border border-white/80 bg-[#fbfbfd] shadow-[0_30px_90px_rgba(15,23,42,0.35)] sm:max-h-[calc(100vh-3rem)]">
+      <form onSubmit={submit} className={`relative flex w-full flex-col overflow-hidden rounded-[30px] border border-white/80 bg-[#fbfbfd] ${embedded ? 'profile-editor-form' : 'max-h-[calc(100vh-1.5rem)] max-w-2xl shadow-[0_30px_90px_rgba(15,23,42,0.35)] sm:max-h-[calc(100vh-3rem)]'}`}>
         <header className="shrink-0 px-5 pb-4 pt-5 sm:px-8 sm:pt-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2" aria-hidden="true">
@@ -103,7 +104,7 @@ export default function ProfileForm({ profile, onSave, onClose, required = false
               <div className="mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-200"><Sparkles className="h-5 w-5" /></div>
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-violet-600">The Guide Academy</p>
-                <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">{required ? 'Create your school profile' : 'Refine your profile'}</h2>
+                <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">{required ? 'Create your school profile' : 'Edit profile details'}</h2>
                 <p className="mt-1 text-sm leading-relaxed text-slate-500">Tell us a little about your work so attendance stays beautifully organised.</p>
               </div>
             </div>

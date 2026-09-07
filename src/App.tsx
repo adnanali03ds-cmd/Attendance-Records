@@ -37,6 +37,7 @@ import {
 import TeacherDashboard from './components/TeacherDashboard';
 import AdminDashboard from './components/AdminDashboard';
 import ProfileForm from './components/ProfileForm';
+import ProfilePage from './components/ProfilePage';
 import './components/design-preview.css';
 
 export default function App() {
@@ -44,7 +45,7 @@ export default function App() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [activePage, setActivePage] = useState<'dashboard' | 'profile'>('dashboard');
   const [isProfileSetupDismissed, setIsProfileSetupDismissed] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
@@ -184,8 +185,8 @@ export default function App() {
           <ChevronDown size={15} />
         </div>
         <nav>
-          <button className="active"><LayoutDashboard size={19} /><span>{profile?.role === 'admin' ? 'Admin workspace' : 'Dashboard'}</span></button>
-          <button onClick={() => setIsEditingProfile(true)}><UserCircle size={19} /><span>My profile</span></button>
+          <button className={activePage === 'dashboard' ? 'active' : ''} onClick={() => { setActivePage('dashboard'); setIsMobileNavOpen(false); }}><LayoutDashboard size={19} /><span>{profile?.role === 'admin' ? 'Admin workspace' : 'Dashboard'}</span></button>
+          <button className={activePage === 'profile' ? 'active' : ''} onClick={() => { setActivePage('profile'); setIsMobileNavOpen(false); }}><UserCircle size={19} /><span>My profile</span></button>
         </nav>
         <div className="dp-sidebar-help">
           <span className="dp-icon-box blue"><ShieldCheck size={18} /></span>
@@ -205,7 +206,7 @@ export default function App() {
           <div className="dp-search top"><Search size={17} /><input placeholder="Search your workspace…" readOnly /></div>
           <div className="dp-top-actions">
             <button className="dp-notification" aria-label="Notifications"><Bell size={19} /><i /></button>
-            <button className="dp-top-profile" onClick={() => setIsEditingProfile(true)}>
+            <button className="dp-top-profile" onClick={() => setActivePage('profile')}>
               <div className={`dp-avatar ${profile?.role === 'admin' ? 'blue' : 'violet'}`}>{profile?.name.split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase()}</div>
               <div><strong>{profile?.name}</strong><span className="capitalize">{profile?.role}</span></div>
               <ChevronDown size={15} />
@@ -214,19 +215,20 @@ export default function App() {
         </header>
         <main className="dp-page">
           <AnimatePresence mode="wait">
-            {profile?.role === 'admin' ? <AdminDashboard profile={profile} /> : <TeacherDashboard profile={profile!} />}
+            {activePage === 'profile'
+              ? <ProfilePage profile={profile!} onSave={saveProfile} />
+              : profile?.role === 'admin' ? <AdminDashboard profile={profile} /> : <TeacherDashboard profile={profile!} />}
           </AnimatePresence>
         </main>
         <footer className="dp-footer"><span>© 2026 The Guide Academy</span><span>Secure attendance · Firebase protected</span></footer>
       </div>
 
-      {((needsProfile && !isProfileSetupDismissed) || isEditingProfile) && profile && (
+      {(needsProfile && !isProfileSetupDismissed) && profile && (
         <ProfileForm
           profile={profile}
           onSave={saveProfile}
           required={needsProfile}
           onClose={() => {
-            setIsEditingProfile(false);
             if (needsProfile) setIsProfileSetupDismissed(true);
           }}
         />
