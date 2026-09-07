@@ -268,33 +268,34 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="dp-page-stack live-dashboard admin-live animate-in fade-in duration-500">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <section className="dp-hero admin-hero">
         <div>
-          <h2 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight font-display">Admin Console</h2>
-          <p className="text-slate-500 mt-1 font-medium italic">Academic Term: Spring 2026 • <span className="text-green-600 font-semibold uppercase text-[10px] tracking-widest ml-2 border border-green-200 px-2 py-0.5 rounded-full">Excel Synced</span></p>
+          <span className="dp-eyebrow"><ShieldCheck className="h-3.5 w-3.5" /> Administrator workspace</span>
+          <h1>Here’s what’s happening today.</h1>
+          <p>{teachers.length} faculty members across two campuses · {format(new Date(), 'EEEE, d MMMM')}</p>
         </div>
-        <div className="flex gap-3">
+        <div className="dp-hero-actions">
           <button 
             onClick={exportToExcel}
-            className="flex-1 md:flex-none py-2.5 px-5 bg-white text-slate-700 border border-slate-200 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 hover:bg-slate-50 transition-all shadow-sm"
+            className="dp-btn dp-btn-glass"
           >
-            <Download className="w-4 h-4 text-slate-400" />
+            <Download className="w-4 h-4" />
             Export Excel
           </button>
           <button 
             onClick={sendDailyReport}
-            className="flex-1 md:flex-none py-2.5 px-5 bg-blue-600 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 shadow-sm hover:bg-blue-700 transition-all"
+            className="dp-btn dp-btn-light"
           >
             <Mail className="w-4 h-4" />
             Send Report
           </button>
         </div>
-      </div>
+      </section>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-200 w-full gap-8">
+      <div className="dp-card live-admin-tabs">
         {[
           { id: 'overview', icon: <Users className="w-4 h-4" />, label: 'Overview' },
           { id: 'users', icon: <ShieldCheck className="w-4 h-4" />, label: 'Faculty' },
@@ -304,7 +305,7 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
-            className={`flex items-center gap-2 pb-4 text-sm font-bold transition-all relative ${
+            className={`live-admin-tab ${
               activeTab === tab.id ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
             }`}
           >
@@ -318,9 +319,16 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
       </div>
 
       {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="dp-page-stack">
+        <section className="dp-metrics-grid">
+          <div className="dp-card dp-metric-card"><span className="dp-icon-box blue"><Users size={20} /></span><div className="dp-metric-copy"><span>Total faculty</span><strong>{teachers.length}</strong><small>Registered staff members</small></div></div>
+          <div className="dp-card dp-metric-card"><span className="dp-icon-box green"><CheckCircle size={20} /></span><div className="dp-metric-copy"><span>Present today</span><strong>{attendance.filter(a => a.date === format(new Date(), 'yyyy-MM-dd')).length}</strong><small className="trend-up">Live attendance count</small></div></div>
+          <div className="dp-card dp-metric-card"><span className="dp-icon-box amber"><FileSpreadsheet size={20} /></span><div className="dp-metric-copy"><span>Pending leaves</span><strong>{pendingLeaves.filter(l => l.status === 'pending').length}</strong><small>Awaiting your decision</small></div></div>
+          <div className="dp-card dp-metric-card"><span className="dp-icon-box violet"><QrIcon size={20} /></span><div className="dp-metric-copy"><span>Active campuses</span><strong>{campuses.filter(c => c.enabled && Number.isFinite(c.latitude) && Number.isFinite(c.longitude)).length}</strong><small>Of two supported locations</small></div></div>
+        </section>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white p-8 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center">
+            <div className="dp-card live-panel flex flex-col items-center">
               <div className="flex justify-between w-full mb-8">
                 <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Attendance QR Display</h3>
                 <span className="text-[10px] bg-green-50 text-green-600 px-2 py-1 rounded font-bold uppercase tracking-tight">Live Active</span>
@@ -343,7 +351,7 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
               </p>
             </div>
 
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+            <div className="dp-card live-panel">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Campus locations</h3>
@@ -389,7 +397,7 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
               <p className="mt-4 text-[11px] text-amber-700">A 3 m radius is supported, but phone GPS can be less accurate indoors. Increase it if valid attendance is rejected.</p>
             </div>
 
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+            <div className="dp-card live-table-card overflow-hidden flex flex-col">
               <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
                 <span className="text-xs font-bold uppercase text-slate-500 tracking-wider">Live Activity Stream</span>
                 <Clock className="w-4 h-4 text-slate-300" />
@@ -434,7 +442,7 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
           </div>
 
           <div className="space-y-6">
-            <div className="bg-slate-900 p-8 rounded-xl text-white shadow-xl border border-white">
+            <div className="live-insight-card">
               <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-8">Faculty Insights</h3>
               <div className="space-y-8">
                 <div>
@@ -456,6 +464,7 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
             </div>
           </div>
         </div>
+        </div>
       )}
 
       {activeTab === 'users' && (
@@ -471,7 +480,7 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
             </button>
           </div>
 
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="dp-card live-table-card overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
               <span className="text-xs font-bold uppercase text-slate-500 tracking-wider">Faculty Roster</span>
               <span className="text-[10px] font-bold text-slate-400">{teachers.length} Members</span>
@@ -614,7 +623,7 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
       {activeTab === 'leaves' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {pendingLeaves.filter(l => l.status === 'pending').map(leave => (
-            <div key={leave.id} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between hover:border-blue-200 transition-colors">
+            <div key={leave.id} className="dp-card live-request-card flex flex-col justify-between hover:border-blue-200 transition-colors">
               <div>
                 <div className="flex justify-between items-start mb-6">
                   <div>
@@ -668,7 +677,7 @@ export default function AdminDashboard({ profile }: { profile: UserProfile }) {
       )}
 
       {activeTab === 'announcements' && (
-        <div className="max-w-xl bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
+        <div className="max-w-2xl dp-card live-panel">
           <div className="flex items-center gap-3 mb-8">
             <div className="p-2 bg-rose-50 rounded-lg">
               <Bell className="w-5 h-5 text-rose-500" />

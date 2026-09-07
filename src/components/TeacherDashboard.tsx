@@ -261,7 +261,7 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="dp-page-stack live-dashboard teacher-live animate-in fade-in duration-500">
       <AnimatePresence>
         {locationHelp && (
           <motion.div
@@ -337,41 +337,46 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
       </AnimatePresence>
 
       {/* Welcome Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <section className="dp-hero teacher-hero">
         <div>
-          <h2 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight font-display">Teacher Dashboard</h2>
-          <p className="text-slate-500 mt-1 font-medium">Academic Term: Spring 2026 • <span className="text-green-600 font-semibold">Ready for Classes</span></p>
+          <span className="dp-eyebrow"><CheckCircle className="h-3.5 w-3.5" /> {format(new Date(), 'EEEE, d MMMM')}</span>
+          <h1>Good morning, {profile.name.split(' ')[0]}.</h1>
+          <p>Your attendance, leave status and school updates are organised below.</p>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="dp-hero-actions">
+          <div className="dp-presence"><i /> Two approved campuses available</div>
           <button 
             onClick={startAttendance}
             disabled={todayRecord?.timeOut !== undefined && todayRecord !== null}
-            className="flex-1 md:flex-none py-2.5 px-5 bg-blue-600 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 shadow-sm hover:bg-blue-700 transition-all disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+            className="dp-btn dp-btn-light disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <QrCode className="w-4 h-4" />
             {todayRecord ? (todayRecord.timeOut ? 'Already Signed Out' : 'Sign Out') : 'Sign In'}
           </button>
+        </div>
+      </section>
+
+      <div className="live-quick-actions">
           <button
             onClick={() => setIsAttendanceCalendarOpen(true)}
-            className="flex-1 md:flex-none py-2.5 px-5 bg-white text-blue-700 border border-blue-200 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 hover:bg-blue-50 transition-all shadow-sm"
+            className="dp-btn dp-btn-secondary"
           >
             <Calendar className="w-4 h-4" />
             Attendance Calendar
           </button>
           <button
             onClick={() => setIsApplyingLeave(true)}
-            className="flex-1 md:flex-none py-2.5 px-5 bg-white text-slate-700 border border-slate-200 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 hover:bg-slate-50 transition-all shadow-sm"
+            className="dp-btn dp-btn-secondary"
           >
-            <PlusCircle className="w-4 h-4 text-slate-400" />
+            <PlusCircle className="w-4 h-4" />
             Apply Leave
           </button>
-        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Left Column: Stats & Chart */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <div className="dp-metrics-grid three">
             <StatsCard 
               label="Present Days"
               value={currentYearModel.summary.present.toString()}
@@ -388,7 +393,7 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
             />
           </div>
 
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+          <div className="dp-card live-panel">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Attendance Distribution</h3>
               <TrendingUp className="w-4 h-4 text-slate-300" />
@@ -419,7 +424,7 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
           </div>
 
           {/* Attendance History */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="dp-card live-table-card overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
               <span className="text-xs font-bold uppercase text-slate-500 tracking-wider">Recent Activity Log</span>
               <Clock className="w-4 h-4 text-slate-300" />
@@ -473,7 +478,7 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
 
         {/* Right Column: Announcements & Leave Status */}
         <div className="space-y-6">
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+          <div className="dp-card live-panel">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Announcements</h3>
               <Bell className="w-4 h-4 text-slate-300" />
@@ -496,7 +501,7 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+          <div className="dp-card live-panel">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Leave Balance</h3>
               <FileSpreadsheet className="w-4 h-4 text-slate-300" />
@@ -568,13 +573,18 @@ export default function TeacherDashboard({ profile }: { profile: UserProfile }) 
 }
 
 function StatsCard({ label, value, subValue, change, valueColor = "text-slate-900" }: { label: string, value: string, subValue?: string, change?: string, valueColor?: string }) {
+  const Icon = label === 'Present Days' ? CheckCircle : label === 'Attendance Rate' ? TrendingUp : FileSpreadsheet;
+  const tone = label === 'Present Days' ? 'green' : label === 'Attendance Rate' ? 'blue' : 'amber';
   return (
-    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-      <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider mb-1">{label}</p>
-      <div className="flex items-end gap-2">
-        <p className={`text-3xl font-bold tracking-tight ${valueColor}`}>{value}</p>
-        {subValue && <span className="text-slate-300 text-lg font-normal mb-0.5">{subValue}</span>}
-        {change && <span className="text-green-500 text-xs font-semibold mb-1">{change}</span>}
+    <div className="dp-card dp-metric-card">
+      <span className={`dp-icon-box ${tone}`}><Icon size={20} /></span>
+      <div className="dp-metric-copy">
+        <span>{label}</span>
+        <div className="live-metric-value">
+          <strong className={valueColor}>{value}</strong>
+          {subValue && <b>{subValue}</b>}
+        </div>
+        <small className={change ? 'trend-up' : ''}>{change || (label === 'Approved Leaves' ? 'This academic year' : 'Current academic year')}</small>
       </div>
     </div>
   );

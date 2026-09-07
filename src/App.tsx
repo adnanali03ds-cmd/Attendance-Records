@@ -23,19 +23,21 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   LayoutDashboard, 
   UserCircle, 
-  QrCode, 
-  Calendar, 
   Bell, 
   LogOut, 
   ShieldCheck, 
-  FileSpreadsheet,
-  GraduationCap
+  GraduationCap,
+  Search,
+  Menu,
+  X,
+  ChevronDown
 } from 'lucide-react';
 
 // Components
 import TeacherDashboard from './components/TeacherDashboard';
 import AdminDashboard from './components/AdminDashboard';
 import ProfileForm from './components/ProfileForm';
+import './components/design-preview.css';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -44,6 +46,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isProfileSetupDismissed, setIsProfileSetupDismissed] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -168,73 +171,54 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col md:flex-row">
-      {/* Sidebar for Desktop */}
-      <aside className="hidden md:flex w-64 bg-white border-r border-slate-200 flex-col sticky top-0 h-screen">
-        <div className="p-8 flex items-center gap-3">
-          <img src="/guide-academy-logo.png" alt="The Guide Academy logo" className="w-11 h-11 object-contain" />
-          <span className="text-xl font-bold tracking-tight text-slate-900 font-display">THE GUIDE ACADEMY</span>
+    <div className="design-preview live-app">
+      <aside className={`dp-sidebar ${isMobileNavOpen ? 'open' : ''}`}>
+        <div className="dp-brand">
+          <img src="/guide-academy-logo.png" alt="The Guide Academy" />
+          <div><strong>THE GUIDE</strong><span>ACADEMY</span></div>
+          <button className="dp-mobile-close" onClick={() => setIsMobileNavOpen(false)} aria-label="Close navigation"><X /></button>
         </div>
-
-        <nav className="flex-1 px-4 space-y-2 mt-4">
-          <div className="p-3 bg-blue-50 text-blue-700 rounded-xl flex items-center gap-3 font-semibold cursor-default">
-            <LayoutDashboard className="w-5 h-5" />
-            Dashboard
-          </div>
-          {/* Placeholder nav items for aesthetic consistency with theme */}
-          <div className="p-3 text-slate-400 rounded-xl flex items-center gap-3 font-medium cursor-not-allowed opacity-50">
-            <Calendar className="w-5 h-5" />
-            Schedules
-          </div>
-          <button onClick={() => setIsEditingProfile(true)} className="w-full p-3 text-slate-600 rounded-xl flex items-center gap-3 font-medium hover:bg-slate-50 transition-colors">
-            <UserCircle className="w-5 h-5" />
-            Profile
-          </button>
-          <div className="p-3 text-slate-400 rounded-xl flex items-center gap-3 font-medium cursor-not-allowed opacity-50">
-            <Bell className="w-5 h-5" />
-            Notifications
-          </div>
+        <div className="dp-school-pill">
+          <GraduationCap size={17} />
+          <div><span>Academic year</span><strong>2026–27</strong></div>
+          <ChevronDown size={15} />
+        </div>
+        <nav>
+          <button className="active"><LayoutDashboard size={19} /><span>{profile?.role === 'admin' ? 'Admin workspace' : 'Dashboard'}</span></button>
+          <button onClick={() => setIsEditingProfile(true)}><UserCircle size={19} /><span>My profile</span></button>
         </nav>
-
-        <div className="p-6 border-t border-slate-100">
-          <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-100">
-            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
-              {profile?.name.charAt(0)}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold text-slate-800 truncate uppercase tracking-wider">{profile?.name}</p>
-              <p className="text-[10px] text-slate-500 font-medium capitalize">{profile?.role}</p>
-            </div>
-            <div className="flex gap-1">
-              <button onClick={() => setIsEditingProfile(true)} className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors" aria-label="Edit profile"><UserCircle className="w-4 h-4" /></button>
-              <button onClick={handleLogout} className="p-1.5 text-slate-400 hover:text-red-500 transition-colors" aria-label="Sign out"><LogOut className="w-4 h-4" /></button>
-            </div>
-          </div>
+        <div className="dp-sidebar-help">
+          <span className="dp-icon-box blue"><ShieldCheck size={18} /></span>
+          <div><strong>Secure attendance</strong><p>Protected by Firebase.</p></div>
+        </div>
+        <div className="dp-user-card">
+          <div className={`dp-avatar ${profile?.role === 'admin' ? 'blue' : 'violet'}`}>{profile?.name.split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase()}</div>
+          <div><strong>{profile?.name}</strong><span>{profile?.email === 'adnanali03.ds@gmail.com' ? 'Permanent admin' : profile?.role}</span></div>
+          <button onClick={handleLogout} title="Sign out" aria-label="Sign out"><LogOut size={17} /></button>
         </div>
       </aside>
+      {isMobileNavOpen && <button className="dp-nav-scrim" onClick={() => setIsMobileNavOpen(false)} aria-label="Close navigation" />}
 
-      {/* Mobile Top Nav */}
-      <nav className="md:hidden h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sticky top-0 z-50">
-        <div className="flex items-center gap-2">
-          <img src="/guide-academy-logo.png" alt="The Guide Academy logo" className="w-8 h-8 object-contain" />
-          <span className="font-bold text-lg font-display">THE GUIDE ACADEMY</span>
-        </div>
-        <div className="flex gap-1">
-          <button onClick={() => setIsEditingProfile(true)} className="p-2 text-slate-400" aria-label="Edit profile"><UserCircle className="w-5 h-5" /></button>
-          <button onClick={handleLogout} className="p-2 text-slate-400" aria-label="Sign out"><LogOut className="w-5 h-5" /></button>
-        </div>
-      </nav>
-
-      {/* Main Content */}
-      <main className="flex-1 p-4 md:p-8 max-w-7xl">
-        <AnimatePresence mode="wait">
-          {profile?.role === 'admin' ? (
-            <AdminDashboard profile={profile} />
-          ) : (
-            <TeacherDashboard profile={profile!} />
-          )}
-        </AnimatePresence>
-      </main>
+      <div className="dp-content">
+        <header className="dp-topbar">
+          <button className="dp-menu-button" onClick={() => setIsMobileNavOpen(true)} aria-label="Open navigation"><Menu /></button>
+          <div className="dp-search top"><Search size={17} /><input placeholder="Search your workspace…" readOnly /></div>
+          <div className="dp-top-actions">
+            <button className="dp-notification" aria-label="Notifications"><Bell size={19} /><i /></button>
+            <button className="dp-top-profile" onClick={() => setIsEditingProfile(true)}>
+              <div className={`dp-avatar ${profile?.role === 'admin' ? 'blue' : 'violet'}`}>{profile?.name.split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase()}</div>
+              <div><strong>{profile?.name}</strong><span className="capitalize">{profile?.role}</span></div>
+              <ChevronDown size={15} />
+            </button>
+          </div>
+        </header>
+        <main className="dp-page">
+          <AnimatePresence mode="wait">
+            {profile?.role === 'admin' ? <AdminDashboard profile={profile} /> : <TeacherDashboard profile={profile!} />}
+          </AnimatePresence>
+        </main>
+        <footer className="dp-footer"><span>© 2026 The Guide Academy</span><span>Secure attendance · Firebase protected</span></footer>
+      </div>
 
       {((needsProfile && !isProfileSetupDismissed) || isEditingProfile) && profile && (
         <ProfileForm
